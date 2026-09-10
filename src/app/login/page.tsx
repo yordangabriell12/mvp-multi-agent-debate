@@ -60,7 +60,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="text-[11px] text-ink-faint block mb-1.5">
+              <label htmlFor="email" className="text-[11px] text-ink-muted block mb-1.5">
                 Email
               </label>
               <input
@@ -77,7 +77,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="text-[11px] text-ink-faint block mb-1.5">
+              <label htmlFor="password" className="text-[11px] text-ink-muted block mb-1.5">
                 Password
               </label>
               <input
@@ -112,7 +112,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-[11px] text-ink-faint text-center mt-4">
+        <p className="text-[11px] text-ink-muted text-center mt-4">
           Failed attempts are rate limited. Five wrong tries locks this address for 15 minutes.
         </p>
       </div>
