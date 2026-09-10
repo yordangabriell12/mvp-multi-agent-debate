@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 
 interface HTMLPreviewProps {
   html: string
@@ -9,42 +9,30 @@ interface HTMLPreviewProps {
 }
 
 export function HTMLPreview({ html, title = 'Preview', height = 400 }: HTMLPreviewProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview')
   const [fullScreen, setFullScreen] = useState(false)
 
-  useEffect(() => {
-    if (iframeRef.current && viewMode === 'preview') {
-      const doc = iframeRef.current.contentDocument
-      if (doc) {
-        doc.open()
-        doc.write(html)
-        doc.close()
-      }
-    }
-  }, [html, viewMode])
-
   return (
-    <div className={`rounded-lg border border-[var(--border)] overflow-hidden my-3 ${fullScreen ? 'fixed inset-4 z-50' : ''}`}>
+    <div className={`rounded-lg border border-[var(--color-border)] overflow-hidden my-3 ${fullScreen ? 'fixed inset-4 z-50' : ''}`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#f8f9fa] border-b border-[var(--border)]">
-        <span className="text-[10px] font-semibold text-[var(--ink-faint)] uppercase">🌐 {title}</span>
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#f8f9fa] border-b border-[var(--color-border)]">
+        <span className="text-[10px] font-semibold text-[var(--color-ink-muted)] uppercase">🌐 {title}</span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setViewMode('preview')}
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${viewMode === 'preview' ? 'bg-[var(--ink)] text-white' : 'bg-[var(--bg-hover)] text-[var(--ink-faint)]'}`}
+            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${viewMode === 'preview' ? 'bg-[var(--color-ink)] text-white' : 'bg-[var(--color-surface-hover)] text-[var(--color-ink-muted)]'}`}
           >
             Preview
           </button>
           <button
             onClick={() => setViewMode('code')}
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${viewMode === 'code' ? 'bg-[var(--ink)] text-white' : 'bg-[var(--bg-hover)] text-[var(--ink-faint)]'}`}
+            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${viewMode === 'code' ? 'bg-[var(--color-ink)] text-white' : 'bg-[var(--color-surface-hover)] text-[var(--color-ink-muted)]'}`}
           >
             Code
           </button>
           <button
             onClick={() => setFullScreen(!fullScreen)}
-            className="px-2 py-0.5 text-[10px] rounded bg-[var(--bg-hover)] text-[var(--ink-faint)] hover:bg-[var(--ink)] hover:text-white transition-colors"
+            className="px-2 py-0.5 text-[10px] rounded bg-[var(--color-surface-hover)] text-[var(--color-ink-muted)] hover:bg-[var(--color-ink)] hover:text-white transition-colors"
           >
             {fullScreen ? '✕ Close' : '⤢ Expand'}
           </button>
@@ -54,10 +42,15 @@ export function HTMLPreview({ html, title = 'Preview', height = 400 }: HTMLPrevi
       {/* Content */}
       {viewMode === 'preview' ? (
         <iframe
-          ref={iframeRef}
+          // srcDoc rather than writing into contentDocument: that way the frame
+          // needs no same-origin access. The sandbox deliberately omits
+          // allow-same-origin, because allow-scripts plus allow-same-origin lets
+          // the frame remove its own sandbox attribute and reach the app origin.
+          srcDoc={html}
           className="w-full bg-white border-0"
           style={{ height: fullScreen ? 'calc(100vh - 40px)' : height }}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
+          referrerPolicy="no-referrer"
         />
       ) : (
         <div className="max-h-[400px] overflow-auto bg-[#1e1e2e] p-3">

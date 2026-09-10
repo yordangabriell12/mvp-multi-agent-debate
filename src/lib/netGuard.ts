@@ -38,10 +38,29 @@ function isPrivateIpv6(host: string): boolean {
   if (host === '::' || host === '::1') return true
   if (host.startsWith('fe80') || host.startsWith('fec0')) return true // link/site local
   if (host.startsWith('fc') || host.startsWith('fd')) return true // unique local
-  // IPv4-mapped (::ffff:127.0.0.1)
-  const mapped = host.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
-  if (mapped) return isPrivateIpv4(mapped[1])
+
+  // IPv4-mapped addresses. The URL parser rewrites the dotted form, so
+  // `::ffff:127.0.0.1` arrives here as `::ffff:7f00:1`; both shapes matter.
+  const mapped = host.match(/^(?:0{0,4}:){1,5}(?:ffff|FFFF):(.+)$/)
+  if (mapped) {
+    const tail = mapped[1]
+    if (tail.includes('.')) return isPrivateIpv4(tail)
+    const asIpv4 = ipv4FromHexGroups(tail)
+    return asIpv4 ? isPrivateIpv4(asIpv4) : true
+  }
+
   return false
+}
+
+/** Turns the two trailing hex groups of a mapped address into dotted-quad form. */
+function ipv4FromHexGroups(tail: string): string | null {
+  const groups = tail.split(':')
+  if (groups.length !== 2) return null
+  const high = Number.parseInt(groups[0], 16)
+  const low = Number.parseInt(groups[1], 16)
+  if (!Number.isFinite(high) || !Number.isFinite(low)) return null
+  if (high < 0 || high > 0xffff || low < 0 || low > 0xffff) return null
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff].join('.')
 }
 
 export interface UrlCheck {

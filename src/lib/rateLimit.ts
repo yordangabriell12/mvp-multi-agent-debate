@@ -16,6 +16,7 @@ interface Bucket {
 }
 
 const buckets = new Map<string, Bucket>()
+const chatWindows = new Map<string, number[]>()
 let lastSweep = Date.now()
 
 export interface RateLimitResult {
@@ -30,6 +31,9 @@ function sweep(now: number): void {
   for (const [key, bucket] of buckets) {
     const idle = now - Math.max(bucket.firstFailureAt, bucket.lockedUntil)
     if (idle > WINDOW_MS + LOCKOUT_MS) buckets.delete(key)
+  }
+  for (const [key, hits] of chatWindows) {
+    if (hits.length === 0 || now - hits[hits.length - 1] > 60 * 60 * 1000) chatWindows.delete(key)
   }
 }
 
@@ -126,4 +130,55 @@ export function recordGlobalFailure(): void {
     globalFailures = globalFailures.slice(-MAX_GLOBAL_SAMPLES)
   }
 }
+
+// --- Chat cost guard -------------------------------------------------------
+//
+// `/api/chat` spends money on every call, so it needs a ceiling. The limit is
+// deliberately loose: one debate turn fans out into many internal calls (each
+// moderator decision, each agent reply, each consensus check is a request), so
+// a tight per-request limit would break normal use. This guards against a
+// runaway client or a leaked session, not against a genuine burst.
+
+const DEFAULT_CHAT_MAX_REQUESTS = 150
+const DEFAULT_CHAT_WINDOW_MS = 5 * 60 * 1000
+
+function positiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(raw ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+export function chatRateLimits(): { maxRequests: number; windowMs: number } {
+  return {
+    maxRequests: positiveInt(process.env.VMA_CHAT_MAX_REQUESTS, DEFAULT_CHAT_MAX_REQUESTS),
+    windowMs: positiveInt(process.env.VMA_CHAT_WINDOW_SECONDS, DEFAULT_CHAT_WINDOW_MS / 1000) * 1000,
+  }
+}
+
+export function maxBodyBytes(): number {
+  return positiveInt(process.env.VMA_MAX_BODY_BYTES, 1_000_000)
+}
+
+export interface ChatLimitResult {
+  allowed: boolean
+  retryAfterSeconds: number
+}
+
+export function checkChatRateLimit(key: string): ChatLimitResult {
+  const { maxRequests, windowMs } = chatRateLimits()
+  const now = Date.now()
+
+  sweep(now)
+
+  const recent = (chatWindows.get(key) ?? []).filter((at) => now - at < windowMs)
+  if (recent.length >= maxRequests) {
+    const oldest = recent[0]
+    chatWindows.set(key, recent)
+    return { allowed: false, retryAfterSeconds: Math.ceil((oldest + windowMs - now) / 1000) }
+  }
+
+  recent.push(now)
+  chatWindows.set(key, recent)
+  return { allowed: true, retryAfterSeconds: 0 }
+}
+
 

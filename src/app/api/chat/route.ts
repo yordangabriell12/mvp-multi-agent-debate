@@ -1,5 +1,6 @@
 import type { ProviderConfig } from '@/types/provider'
 import { checkOutboundUrl } from '@/lib/netGuard'
+import { checkChatRateLimit, maxBodyBytes } from '@/lib/rateLimit'
 
 export const runtime = 'nodejs'
 
@@ -9,6 +10,7 @@ interface AgentConfig {
   systemPrompt: string
   provider: string
   modelName: string
+  temperature?: number
 }
 
 interface ChatRequest {
@@ -17,15 +19,65 @@ interface ChatRequest {
   providers: ProviderConfig[]
 }
 
+function jsonResponse(payload: unknown, status = 200, extraHeaders?: Record<string, string>) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+  })
+}
+
+function clientIp(req: Request): string {
+  // Cloudflare overwrites this on every proxied request; X-Forwarded-For is
+  // only a fallback because a direct connection can spoof it.
+  const cfIp = req.headers.get('cf-connecting-ip')?.trim()
+  if (cfIp) return cfIp
+  const forwarded = req.headers.get('x-forwarded-for')
+  if (forwarded) return forwarded.split(',')[0].trim()
+  return req.headers.get('x-real-ip')?.trim() || 'unknown'
+}
+
+/**
+ * Reasoning models reject an explicit temperature, so only send it when the
+ * caller set one and the target model accepts it.
+ */
+function resolveTemperature(agent: AgentConfig): number | undefined {
+  if (typeof agent.temperature !== 'number' || !Number.isFinite(agent.temperature)) return undefined
+  if (!agent.modelName) return undefined
+  if (/^o\d/i.test(agent.modelName)) return undefined
+  if (/-reason/i.test(agent.modelName)) return undefined
+  return Math.min(2, Math.max(0, agent.temperature))
+}
+
 export async function POST(req: Request) {
-  const body: ChatRequest = await req.json()
+  const limit = checkChatRateLimit(clientIp(req))
+  if (!limit.allowed) {
+    return jsonResponse({ error: 'Too many requests. Please slow down.' }, 429, {
+      'Retry-After': String(limit.retryAfterSeconds),
+    })
+  }
+
+  // Read as text first so an oversized body is rejected before parsing.
+  const rawBody = await req.text()
+  const byteCap = maxBodyBytes()
+  if (rawBody.length > byteCap) {
+    return jsonResponse({ error: `Request body too large (limit ${byteCap} bytes)` }, 413)
+  }
+
+  let body: ChatRequest
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    return jsonResponse({ error: 'Invalid JSON body' }, 400)
+  }
+
   const { messages, agent, providers } = body
+  if (!agent?.provider || !Array.isArray(messages) || !Array.isArray(providers)) {
+    return jsonResponse({ error: 'Invalid request shape' }, 400)
+  }
 
   const providerConfig = providers.find((p) => p.id === agent.provider)
   if (!providerConfig?.apiKey) {
-    return new Response(JSON.stringify({ error: `No API key for ${agent.provider}` }), {
-      status: 400, headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ error: `No API key for ${agent.provider}` }, 400)
   }
 
   // The base URL is attacker-controlled (it arrives in the request body), so it
@@ -35,11 +87,11 @@ export async function POST(req: Request) {
   if (process.env.VMA_ALLOW_PRIVATE_BASEURL !== 'true') {
     const guard = checkOutboundUrl(providerConfig.baseUrl)
     if (!guard.ok) {
-      return new Response(JSON.stringify({ error: guard.reason }), {
-        status: 400, headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: guard.reason }, 400)
     }
   }
+
+  const temperature = resolveTemperature(agent)
 
   // Build OpenAI-compatible chat completions payload
   const fullMessages = [
@@ -70,6 +122,8 @@ export async function POST(req: Request) {
           max_tokens: 4096,
           system: systemMsg?.content || '',
           messages: chatMsgs.map(m => ({ role: m.role, content: m.content })),
+          // Anthropic caps temperature at 1.
+          ...(temperature === undefined ? {} : { temperature: Math.min(1, temperature) }),
           stream: true,
         }),
       })
@@ -125,7 +179,7 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           model: agent.modelName,
           messages: fullMessages,
-          temperature: 0.7,
+          temperature: temperature ?? 0.7,
           max_tokens: 4096,
           stream: true,
         }),
