@@ -45,6 +45,7 @@ status: live
 | [[07 Keamanan]] | Login, anti brute force, SSRF, threat model |
 | [[08 Troubleshooting]] | Masalah yang pernah muncul dan solusinya |
 | [[09 Changelog]] | Riwayat perubahan |
+| [[10 Sinkronisasi Config]] | API key ikut ke perangkat lain, enkripsi, volume data |
 
 ### Referensi Asli
 - `PRD.md` di root repo: Product Requirements Document lengkap

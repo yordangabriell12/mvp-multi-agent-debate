@@ -6,13 +6,21 @@ export const dynamic = 'force-dynamic'
 
 // This route sits behind the auth proxy: only a signed-in session can reach it,
 // which is what keeps one person's API keys away from everyone else.
+//
+// The response always carries no-store. It is authenticated JSON, so no proxy,
+// CDN or browser should ever keep a copy: a cached response could otherwise be
+// served to a request that is no longer signed in.
+const NO_STORE = { 'Cache-Control': 'no-store, private, max-age=0' }
 
 export async function GET() {
   const result = await readConfig()
   if (result.error) {
-    return NextResponse.json({ config: null, updatedAt: null, warning: result.error })
+    return NextResponse.json(
+      { config: null, updatedAt: null, warning: result.error },
+      { headers: NO_STORE }
+    )
   }
-  return NextResponse.json({ config: result.config, updatedAt: result.updatedAt })
+  return NextResponse.json({ config: result.config, updatedAt: result.updatedAt }, { headers: NO_STORE })
 }
 
 export async function PUT(req: Request) {
@@ -20,16 +28,16 @@ export async function PUT(req: Request) {
   try {
     body = await req.json()
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers: NO_STORE })
   }
 
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Expected a configuration object' }, { status: 400 })
+    return NextResponse.json({ error: 'Expected a configuration object' }, { status: 400, headers: NO_STORE })
   }
 
   const result = await writeConfig(body)
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 400 })
+    return NextResponse.json({ error: result.error }, { status: 400, headers: NO_STORE })
   }
-  return NextResponse.json({ ok: true, updatedAt: result.updatedAt })
+  return NextResponse.json({ ok: true, updatedAt: result.updatedAt }, { headers: NO_STORE })
 }

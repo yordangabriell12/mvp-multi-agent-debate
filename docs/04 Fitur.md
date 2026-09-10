@@ -93,7 +93,44 @@ Agent bisa diberi kemampuan mencari. Aktifkan lewat flag pencarian pada agent, l
 > Pencarian dijalankan **sekali per pertanyaan**, bukan sekali per agent. Kalau tidak ada agent yang mengaktifkan pencarian, tidak ada permintaan tambahan sama sekali. Hasilnya diambil dari API Wikipedia dan tidak butuh API key.
 
 ### 2.7 Role Lock
-Kalau **Role Lock** dinyalakan, setiap agent diminta tetap berada di dalam perannya dan menyerahkan pertanyaan di luar keahliannya kepada rekan yang tepat.
+Kalau **Role Lock** dinyalakan, setiap agent diminta tetap berada di dalam peranannya dan menyerahkan pertanyaan di luar keahliannya kepada rekan yang tepat.
+
+### 2.8 Perbaiki teks (Improve)
+Tombol **Improve** menulis ulang teks dengan model yang kamu konfigurasi. Ada di dua tempat:
+
+| Lokasi | Mode | Yang dilakukan |
+| --- | --- | --- |
+| Kotak chat utama | `chat` | Memperjelas pesanmu, menambah konteks yang pembaca butuhkan, tanpa menambah fakta baru |
+| System prompt agent (modal Manage Agents dan Agent Roles) | `persona` | Mempertajam prompt: peran, nada, apa yang boleh dan tidak boleh dilakukan |
+
+> [!important] Aturan yang diwarisi
+> Penulis ulang memakai aturan bukti dan aturan penulisan yang sama seperti agent, jadi hasilnya tidak bisa menyelipkan angka yang tidak ada atau diisi kata terlarang.
+>
+> - Bahasa aslimu dipertahankan: Indonesia tetap Indonesia
+> - Hanya teks hasil tulis ulang yang dikembalikan, jadi langsung menggantikan isi kolom
+> - Model yang dipakai: model moderator kalau diatur, kalau tidak provider pertama yang punya API key
+> - Kalau belum ada provider yang bisa dipakai, tombolnya menjelaskan alasannya, bukan gagal diam-diam
+
+### 2.9 Angka giliran (Max Rounds) yang dapat diprediksi
+
+> [!warning] Kenapa ini penting untuk biaya
+> Loop debat memanggil **semua** agent di room pada setiap giliran. Jadi 3 agent dengan 5 giliran berarti 15 panggilan API, bukan 5.
+>
+> Bawaannya sekarang **1**: hanya giliran pembuka, tanpa putaran tambahan. Ini yang diharapkan dari mode Normal: tanya, dapat jawaban, selesai.
+>
+> Pilihan yang tersedia: `1`, `2`, `3`, `5`, `10` dengan keterangan artinya. Setiap giliran tambahan muncul sebagai pesan sistem di chat, misal "Round 2 of 3: agents respond to each other", supaya panggilan tambahan terbaca sebagai kemajuan, bukan aplikasi yang menggantung.
+
+### 2.10 Disiplin bukti (anti halu)
+
+Setiap prompt agent menyertakan dua blok aturan yang sama:
+
+| Blok | Isi |
+| --- | --- |
+| **EVIDENCE DISCIPLINE** | Pisahkan yang diketahui dari yang disimpulkan. Dilarang mengarang angka, tanggal, nama, kutipan, atau sumber. Sebutkan apa yang perlu diukur kalau data tidak ada |
+| **WRITING RULES** | Tanpa pembuka basa-basi, tanpa em dash, daftar kata terlarang, utamakan yang konkret |
+
+> [!note] Kenapa di prompt, bukan di system prompt saja
+> Model lebih sering mengabaikan aturan yang hanya ada di system prompt. Blok ini ditempel langsung ke permintaan, di kedua cabang prompt (debat dan normal), dan dipakai juga oleh penulis ulang teks.
 
 ---
 

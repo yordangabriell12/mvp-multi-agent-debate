@@ -148,10 +148,15 @@ Lalu di Nginx Proxy Manager, buat proxy host:
 | `VMA_AUTH_PASSWORD_HASH` | ya | | Hash PBKDF2 dari password |
 | `VMA_AUTH_PASSWORD` | tidak | | Password teks asli, hanya fallback. Tidak disarankan |
 | `VMA_SESSION_SECRET` | ya | | Kunci HMAC penanda tangan cookie |
+| `VMA_CONFIG_KEY` | tidak | jatuh ke `VMA_SESSION_SECRET` | Kunci enkripsi config tersimpan |
+| `VMA_DATA_DIR` | tidak | `./data` | Lokasi file config |
 | `VMA_ALLOW_PRIVATE_BASEURL` | tidak | `false` | Set `true` hanya kalau provider AI ada di jaringan privat |
 | `VMA_CHAT_MAX_REQUESTS` | tidak | `150` | Batas panggilan `/api/chat` per IP |
 | `VMA_CHAT_WINDOW_SECONDS` | tidak | `300` | Jendela waktu untuk batas di atas |
 | `VMA_MAX_BODY_BYTES` | tidak | `1000000` | Ukuran body maksimal untuk `/api/chat` |
+
+> [!warning] Mengganti `VMA_CONFIG_KEY` atau `VMA_SESSION_SECRET`
+> Config yang tersimpan jadi tidak bisa didekripsi. Sistem melaporkan peringatan, bukan crash, dan kamu memulai dari workspace kosong. Set sekali, lalu simpan. Lihat [[10 Sinkronisasi Config]].
 
 > [!tip] Kalau sering kena 429
 > Mode moderator dengan banyak agent memanggil `/api/chat` berkali-kali per giliran. Naikkan batasnya kalau pemakaian normal ikut terblokir:
@@ -160,6 +165,17 @@ Lalu di Nginx Proxy Manager, buat proxy host:
 > VMA_CHAT_WINDOW_SECONDS=300
 > ```
 > Lalu `docker compose up -d`. Hitungannya disimpan di memori proses, jadi restart mengosongkannya.
+
+---
+
+## 7b. Volume Data
+
+| Volume | Mount | Isi |
+| --- | --- | --- |
+| `vma-data` | `/app/data` | Config tersinkron (provider, agent, sesi), terenkripsi |
+
+> [!note] Kenapa volume bernama, bukan bind mount
+> Volume bernama ikut bertahan saat image di-rebuild, dan mewarisi kepemilikan direktori dari image. Dockerfile membuat `/app/data` dengan `chown nextjs`, jadi user non-root di dalam container bisa menulis ke situ tanpa perlu mengatur permission manual.
 
 ---
 

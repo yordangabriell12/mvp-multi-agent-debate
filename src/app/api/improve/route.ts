@@ -14,10 +14,13 @@ interface ImproveRequest {
   providers: ProviderConfig[]
 }
 
+// Authenticated JSON. No proxy or browser should keep a copy.
+const NO_STORE = { 'Cache-Control': 'no-store, private, max-age=0' }
+
 function jsonResponse(payload: unknown, status = 200, extra?: Record<string, string>) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json', ...extra },
+    headers: { 'Content-Type': 'application/json', ...NO_STORE, ...extra },
   })
 }
 
