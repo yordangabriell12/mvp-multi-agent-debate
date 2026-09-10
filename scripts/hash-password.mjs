@@ -35,7 +35,7 @@ async function main() {
     KEY_BYTES * 8
   )
 
-  console.log(`pbkdf2$${PBKDF2_ITERATIONS}$${toBase64Url(salt)}$${toBase64Url(new Uint8Array(bits))}`)
+  console.log(`pbkdf2:${PBKDF2_ITERATIONS}:${toBase64Url(salt)}:${toBase64Url(new Uint8Array(bits))}`)
 }
 
 main()

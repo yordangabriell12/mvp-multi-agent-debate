@@ -77,33 +77,58 @@ async function pbkdf2(
 }
 
 /**
- * Produces a self-contained password hash: `pbkdf2$<iterations>$<salt>$<hash>`.
+ * Produces a self-contained password hash: `pbkdf2:<iterations>:<salt>:<hash>`.
  * Run `node scripts/hash-password.mjs '<password>'` to generate one.
+ *
+ * Colon separated on purpose: base64url contains no colons, and a `$` in the
+ * value would be treated as variable interpolation by Docker Compose and most
+ * shells, which silently corrupts the hash.
  */
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const derived = await pbkdf2(password, salt, PBKDF2_ITERATIONS)
-  return `pbkdf2$${PBKDF2_ITERATIONS}$${toBase64Url(salt)}$${toBase64Url(derived)}`
+  return `pbkdf2:${PBKDF2_ITERATIONS}:${toBase64Url(salt)}:${toBase64Url(derived)}`
+}
+
+interface ParsedHash {
+  iterations: number
+  salt: Uint8Array<ArrayBuffer>
+  hash: Uint8Array<ArrayBuffer>
+}
+
+function parsePasswordHash(stored: string): ParsedHash | null {
+  // The `$` form is the older layout; it is still accepted so existing
+  // deployments keep working.
+  const parts = stored.startsWith('pbkdf2:')
+    ? stored.split(':')
+    : stored.startsWith('pbkdf2$')
+      ? stored.split('$')
+      : null
+  if (!parts || parts.length !== 4 || parts[0] !== 'pbkdf2') return null
+
+  const iterations = Number.parseInt(parts[1], 10)
+  if (!Number.isFinite(iterations) || iterations < 10000) return null
+
+  try {
+    return { iterations, salt: fromBase64Url(parts[2]), hash: fromBase64Url(parts[3]) }
+  } catch {
+    return null
+  }
 }
 
 /**
- * Verifies a password against a stored hash. Also accepts a bare plaintext
- * value so `VMA_AUTH_PASSWORD` keeps working, but a hash is strongly preferred:
- * a leaked container environment should not hand over the password itself.
+ * Verifies a password against a stored hash. A bare plaintext value is also
+ * accepted so `VMA_AUTH_PASSWORD` keeps working, but a hash is strongly
+ * preferred: a leaked container environment should not hand over the password.
  */
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  if (stored.startsWith('pbkdf2$')) {
-    const parts = stored.split('$')
-    if (parts.length !== 4) return false
-    const iterations = Number.parseInt(parts[1], 10)
-    if (!Number.isFinite(iterations) || iterations < 10000) return false
-    const salt = fromBase64Url(parts[2])
-    const expected = fromBase64Url(parts[3])
-    const derived = await pbkdf2(password, salt, iterations)
-    return timingSafeEqual(derived, expected)
+  const parsed = parsePasswordHash(stored)
+  if (!parsed) {
+    if (!stored) return false
+    return timingSafeEqual(encoder.encode(password), encoder.encode(stored))
   }
-  if (!stored) return false
-  return timingSafeEqual(encoder.encode(password), encoder.encode(stored))
+  const derived = await pbkdf2(password, parsed.salt, parsed.iterations)
+  return timingSafeEqual(derived, parsed.hash)
 }
 
 export async function createSessionToken(
