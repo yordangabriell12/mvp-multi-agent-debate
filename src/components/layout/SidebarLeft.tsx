@@ -6,7 +6,7 @@ import { useAgentStore } from '@/store/agentStore'
 import { useModalStore } from '@/store/modalStore'
 import { SessionItem } from '@/components/sessions/SessionItem'
 import { cn } from '@/lib/utils'
-import { SidebarFooterButton, KeyIcon, PeopleIcon, CubeIcon, EditIcon, DocIcon } from './SidebarIcons'
+import { SidebarFooterButton, KeyIcon, PeopleIcon, CubeIcon, EditIcon, DocIcon, ExitIcon } from './SidebarIcons'
 
 export function SidebarLeft() {
   const [collapsed, setCollapsed] = useState(false)
@@ -16,6 +16,13 @@ export function SidebarLeft() {
   const openModal = useModalStore((s) => s.openModal)
 
   useEffect(() => { setMounted(true) }, [])
+
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch { /* clear the cookie via redirect anyway */ }
+    window.location.assign('/login')
+  }
 
   return (
     <>
@@ -85,6 +92,7 @@ export function SidebarLeft() {
           <SidebarFooterButton icon={<EditIcon />} label="Agent Roles" onClick={() => openModal('roles')} />
           <div className="border-t border-border my-1" />
           <SidebarFooterButton icon={<DocIcon />} label="Knowledge Base" onClick={() => openModal('documents')} />
+          <SidebarFooterButton icon={<ExitIcon />} label="Sign out" onClick={handleSignOut} />
         </div>
       </aside>
 

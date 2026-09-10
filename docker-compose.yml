@@ -9,6 +9,13 @@ services:
       - "127.0.0.1:3100:3000"
     environment:
       - NODE_ENV=production
+      # Login gate. Values come from the .env file next to this compose file
+      # (docker compose loads it automatically); never commit that file.
+      - VMA_AUTH_EMAIL=${VMA_AUTH_EMAIL}
+      - VMA_AUTH_PASSWORD_HASH=${VMA_AUTH_PASSWORD_HASH}
+      - VMA_SESSION_SECRET=${VMA_SESSION_SECRET}
+      # Keep false unless a provider genuinely lives on a private network.
+      - VMA_ALLOW_PRIVATE_BASEURL=${VMA_ALLOW_PRIVATE_BASEURL:-false}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
       interval: 30s

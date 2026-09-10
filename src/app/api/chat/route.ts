@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '@/types/provider'
+import { checkOutboundUrl } from '@/lib/netGuard'
 
 export const runtime = 'nodejs'
 
@@ -25,6 +26,19 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: `No API key for ${agent.provider}` }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  // The base URL is attacker-controlled (it arrives in the request body), so it
+  // must not be allowed to reach loopback or private addresses. Set
+  // VMA_ALLOW_PRIVATE_BASEURL=true only when a provider genuinely lives on a
+  // private network (for example a self-hosted Ollama instance).
+  if (process.env.VMA_ALLOW_PRIVATE_BASEURL !== 'true') {
+    const guard = checkOutboundUrl(providerConfig.baseUrl)
+    if (!guard.ok) {
+      return new Response(JSON.stringify({ error: guard.reason }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   // Build OpenAI-compatible chat completions payload

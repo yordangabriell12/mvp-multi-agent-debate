@@ -58,6 +58,15 @@ export function EditIcon() {
   )
 }
 
+export function ExitIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M9 4.5V3a1.5 1.5 0 0 0-1.5-1.5H3A1.5 1.5 0 0 0 1.5 3v8A1.5 1.5 0 0 0 3 12.5h4.5A1.5 1.5 0 0 0 9 11V9.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.5 7h7M10 4.5L12.5 7 10 9.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function DocIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
