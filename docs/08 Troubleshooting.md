@@ -1,0 +1,203 @@
+---
+title: Troubleshooting
+aliases:
+  - Masalah
+  - Errors
+  - Perbaikan
+tags:
+  - vma/ops
+  - vma/troubleshooting
+created: 2026-09-10
+updated: 2026-09-10
+---
+
+# 🔧 Troubleshooting
+
+> [!abstract] Isi
+> Kumpulan masalah nyata yang pernah muncul, penyebabnya, dan cara memperbaikinya. Diurutkan dari yang paling sering.
+
+[[VMA|← Kembali ke Home]] · [[06 Deployment]]
+
+---
+
+## 1. Build gagal: `Cannot find module 'lightningcss'`
+
+> [!failure] Gejala
+> ```
+> Error: Cannot find module '../lightningcss.darwin-arm64.node'
+> Import trace: ./src/app/globals.css
+> ```
+
+**Penyebab.** Turbopack (default Next 16) mengevaluasi config PostCSS/Tailwind di dalam konteks ter-*bundle*, sehingga tidak bisa me-resolve binary native `lightningcss`. Ini masalah lingkungan, bukan bug kode.
+
+**Perbaikan.** Bangun dengan webpack:
+
+```bash
+npx next build --webpack
+```
+
+Dockerfile sudah memakai perintah ini. Konsekuensinya, `npm run build` biasa (Turbopack) akan gagal di sebagian mesin.
+
+---
+
+## 2. Situs membalas `502 Bad Gateway`
+
+> [!failure] Gejala
+> Cloudflare membalas `502`. Container `vma` terlihat `healthy` dan `curl` ke `127.0.0.1:3100` dari host berhasil.
+
+**Penyebab.** Nginx Proxy Manager berjalan **di dalam container**. Saat proxy diarahkan ke `127.0.0.1:3100`, dari sisi NPM alamat itu menunjuk ke container NPM sendiri, bukan ke host.
+
+**Perbaikan.** Sambungkan container ke network yang sama dengan NPM, lalu arahkan ke nama container:
+
+```yaml
+networks:
+  proxy:
+    external: true
+    name: 3_jaringan-lokal
+```
+
+Lalu di proxy host NPM:
+
+| Field | Nilai |
+| --- | --- |
+| Forward Hostname | `vma` |
+| Forward Port | `3000` |
+
+> [!tip] Cara memastikan container berada di network yang benar
+> ```bash
+> docker inspect vma --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+> ```
+> Output harus memuat `3_jaringan-lokal`.
+
+---
+
+## 3. Login selalu gagal walau password benar
+
+> [!failure] Gejala
+> `docker compose config` atau `build` memunculkan peringatan seperti:
+> ```
+> level=warning msg="The \"aYLq...\" variable is not set. Defaulting to a blank string."
+> ```
+> Password yang benar tetap ditolak.
+
+**Penyebab.** Docker Compose memperlakukan `$` di file `.env` sebagai awal variabel. Hash lama berformat `pbkdf2$210000$salt$hash`, sehingga setiap bagian setelah `$` dianggap variabel dan diganti kosong.
+
+**Perbaikan.** Gunakan format pemisah titik dua yang tidak mengandung `$`:
+
+```
+pbkdf2:<iterasi>:<salt-base64url>:<hash-base64url>
+```
+
+Buat hash baru:
+
+```bash
+node scripts/hash-password.mjs 'password-baru'
+```
+
+> [!important] Pelajaran umum
+> Jangan menaruh tanda dolar di nilai `.env` untuk Docker Compose. Kalau terpaksa, tulis `$$` untuk literal satu `$`.
+
+---
+
+## 4. Error: kedua file `middleware` dan `proxy` terdeteksi
+
+> [!failure] Gejala
+> ```
+> Both middleware file and proxy file are detected.
+> Please use "./src/proxy.ts" only.
+> ```
+
+**Penyebab.** Next.js 16 mengganti konvensi `middleware` menjadi `proxy`. Keduanya tidak boleh ada bersamaan.
+
+**Perbaikan.** Hapus `src/middleware.ts`, lalu di `src/proxy.ts` ekspor fungsi bernama `proxy` (bukan `middleware`):
+
+```ts
+export async function proxy(req: NextRequest) { /* ... */ }
+
+export const config = { matcher: ['/((?!_next/static|_next/image).*)'] }
+```
+
+---
+
+## 5. TypeScript: `Uint8Array` tidak bisa dipakai sebagai `BufferSource`
+
+> [!failure] Gejala
+> ```
+> Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'BufferSource'.
+> ```
+
+**Penyebab.** TypeScript versi baru membedakan `Uint8Array<ArrayBuffer>` dari `Uint8Array<ArrayBufferLike>`. API Web Crypto menuntut yang pertama.
+
+**Perbaikan.** Anotasi tipe secara eksplisit:
+
+```ts
+function fromBase64Url(input: string): Uint8Array<ArrayBuffer> {
+  // ...
+}
+```
+
+---
+
+## 6. Peringatan: `process.cwd is not supported in the Edge Runtime`
+
+> [!warning] Gejala
+> Muncul sebagai peringatan saat build, build tetap berhasil.
+
+**Penyebab.** Rantai impor dari `next/server` menarik sebagian modul Node. Ini peringatan bawaan, bukan kesalahan konfigurasi.
+
+**Perbaikan.** Tidak perlu apa-apa. Kalau mengganggu, abaikan.
+
+---
+
+## 7. Teks samar sulit dibaca, kontras gagal WCAG
+
+> [!failure] Gejala
+> Label atau catatan kecil terlihat pucat di atas latar putih.
+
+**Penyebab.** Token `ink-faint` (`#9c9590`) hanya mencapai kontras sekitar **2.9:1**, di bawah ambang WCAG AA (4.5:1) untuk teks normal.
+
+**Perbaikan.** Untuk teks yang perlu dibaca, pakai `ink-muted` (`#6b6560`, sekitar 5.7:1).
+
+> [!note] Status
+> Halaman login sudah memakai `ink-muted`. Komponen lain masih banyak memakai `ink-faint` untuk label, timestamp, dan role agent, jadi masih ada temuan yang belum ditangani.
+
+---
+
+## 8. Diagnostik Cepat
+
+> [!example] Perintah yang sering dipakai
+> ```bash
+> # Container sehat?
+> docker compose ps
+>
+> # Lihat log terbaru
+> docker compose logs --tail=50 vma
+>
+> # Aplikasi membalas dari host?
+> curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3100/login
+>
+> # Container ada di network proxy?
+> docker inspect vma --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+>
+> # NPM bisa menjangkau container?
+> docker exec nginx-proxy-manager getent hosts vma
+>
+> # Ulangi dari nol
+> cd ~/apps/vma && docker compose down && docker compose up -d --build
+> ```
+
+---
+
+## 9. Di Mana Mencari
+
+| Kebutuhan | Lokasi |
+| --- | --- |
+| Log aplikasi | `docker compose logs vma` |
+| Log NPM | container `nginx-proxy-manager`, folder `/data/logs/` |
+| Konfigurasi env | `~/apps/vma/.env` |
+| Data NPM | volume container `nginx-proxy-manager`, `/data` |
+| Backup harian | `/root/backups/` di server |
+
+---
+
+Terkait: [[06 Deployment]] · [[07 Keamanan]] · [[09 Changelog]]
