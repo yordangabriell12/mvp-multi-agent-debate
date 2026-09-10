@@ -5,7 +5,8 @@ services:
     container_name: vma
     restart: unless-stopped
     ports:
-      # Bind to loopback only — Nginx Proxy Manager exposes it via HTTPS.
+      # Loopback-only. Useful for debugging on the host; the proxy reaches the
+      # container over the shared Docker network instead.
       - "127.0.0.1:3100:3000"
     environment:
       - NODE_ENV=production
@@ -16,9 +17,20 @@ services:
       - VMA_SESSION_SECRET=${VMA_SESSION_SECRET}
       # Keep false unless a provider genuinely lives on a private network.
       - VMA_ALLOW_PRIVATE_BASEURL=${VMA_ALLOW_PRIVATE_BASEURL:-false}
+    networks:
+      - default
+      - proxy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+
+networks:
+  # Shared with the Nginx Proxy Manager container, so it can reach this service
+  # by name. The name is fixed because the stack was created outside Compose.
+  proxy:
+    external: true
+    name: 3_jaringan-lokal
+
