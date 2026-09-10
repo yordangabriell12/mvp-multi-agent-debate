@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { type ProviderConfig, PRESET_PROVIDERS } from '@/types/provider'
 import { useAgentStore } from '@/store/agentStore'
 import { generateId } from '@/lib/utils'
+import { STORAGE_KEYS } from '@/lib/storage'
 
 interface SettingsState {
   providers: ProviderConfig[]
@@ -18,7 +19,7 @@ interface SettingsState {
 function loadProviders(): ProviderConfig[] {
   if (typeof window === 'undefined') return PRESET_PROVIDERS.map((p) => ({ ...p, apiKey: '' }))
   try {
-    const raw = localStorage.getItem('vma-providers')
+    const raw = localStorage.getItem(STORAGE_KEYS.providers)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
   return PRESET_PROVIDERS.map((p) => ({ ...p, apiKey: '' }))
@@ -26,13 +27,13 @@ function loadProviders(): ProviderConfig[] {
 
 function saveProviders(providers: ProviderConfig[]) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem('vma-providers', JSON.stringify(providers)) } catch { /* ignore */ }
+  try { localStorage.setItem(STORAGE_KEYS.providers, JSON.stringify(providers)) } catch { /* ignore */ }
 }
 
 function loadModeratorSettings(): { providerId: string; modelId: string } {
   if (typeof window === 'undefined') return { providerId: '', modelId: '' }
   try {
-    const raw = localStorage.getItem('vma-moderator')
+    const raw = localStorage.getItem(STORAGE_KEYS.moderator)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
   return { providerId: '', modelId: '' }
@@ -40,7 +41,7 @@ function loadModeratorSettings(): { providerId: string; modelId: string } {
 
 function saveModeratorSettings(settings: { providerId: string; modelId: string }) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem('vma-moderator', JSON.stringify(settings)) } catch { /* ignore */ }
+  try { localStorage.setItem(STORAGE_KEYS.moderator, JSON.stringify(settings)) } catch { /* ignore */ }
 }
 
 const modSettings = loadModeratorSettings()

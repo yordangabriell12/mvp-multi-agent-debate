@@ -38,3 +38,7 @@ venv/
 # secrets in docs (kept local for the Obsidian vault, never committed)
 docs/Kredensial.md
 
+# server-side config store (holds provider API keys, encrypted)
+data/
+
+

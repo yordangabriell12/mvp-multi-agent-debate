@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Message } from '@/types/message'
 import { generateId } from '@/lib/utils'
-import { safeSetItem } from '@/lib/storage'
+import { STORAGE_KEYS, safeSetItem } from '@/lib/storage'
 
 interface ChatState {
   messages: Record<string, Message[]>
@@ -16,14 +16,14 @@ interface ChatState {
 function loadMessages(): Record<string, Message[]> {
   if (typeof window === 'undefined') return {}
   try {
-    const raw = localStorage.getItem('vma-messages')
+    const raw = localStorage.getItem(STORAGE_KEYS.messages)
     if (raw) return JSON.parse(raw)
   } catch { /* corrupt payload: start clean rather than crash on boot */ }
   return {}
 }
 
 function persistMessages(messages: Record<string, Message[]>): string | null {
-  const result = safeSetItem('vma-messages', JSON.stringify(messages))
+  const result = safeSetItem(STORAGE_KEYS.messages, JSON.stringify(messages))
   return result.ok ? null : result.error ?? 'Could not save to browser storage.'
 }
 

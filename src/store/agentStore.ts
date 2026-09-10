@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { type Agent, DEFAULT_AGENTS } from '@/types/agent'
 import { generateId } from '@/lib/utils'
+import { STORAGE_KEYS } from '@/lib/storage'
 
 interface AgentState {
   agents: Agent[]
@@ -13,7 +14,7 @@ interface AgentState {
 function loadAgents(): Agent[] {
   if (typeof window === 'undefined') return [...DEFAULT_AGENTS]
   try {
-    const raw = localStorage.getItem('vma-agents')
+    const raw = localStorage.getItem(STORAGE_KEYS.agents)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
   return [...DEFAULT_AGENTS]
@@ -21,7 +22,7 @@ function loadAgents(): Agent[] {
 
 function saveAgents(agents: Agent[]) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem('vma-agents', JSON.stringify(agents)) } catch { /* ignore */ }
+  try { localStorage.setItem(STORAGE_KEYS.agents, JSON.stringify(agents)) } catch { /* ignore */ }
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({

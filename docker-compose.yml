@@ -17,6 +17,12 @@ services:
       - VMA_SESSION_SECRET=${VMA_SESSION_SECRET}
       # Keep false unless a provider genuinely lives on a private network.
       - VMA_ALLOW_PRIVATE_BASEURL=${VMA_ALLOW_PRIVATE_BASEURL:-false}
+      # Where the synced workspace config (providers with API keys) is stored.
+      - VMA_DATA_DIR=/app/data
+    volumes:
+      # Persists providers, agents and sessions across restarts and across the
+      # devices you sign in from. Named volume so it survives image rebuilds.
+      - vma-data:/app/data
     networks:
       - default
       - proxy
@@ -26,6 +32,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+volumes:
+  vma-data:
 
 networks:
   # Shared with the Nginx Proxy Manager container, so it can reach this service

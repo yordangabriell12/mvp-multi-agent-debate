@@ -9,6 +9,20 @@ export interface SaveResult {
   error?: string
 }
 
+/**
+ * Names of the persisted keys, in one place. The config sync module reads and
+ * writes the same keys during hydration, so a typo here would silently split
+ * local state from synced state.
+ */
+export const STORAGE_KEYS = {
+  providers: 'vma-providers',
+  moderator: 'vma-moderator',
+  agents: 'vma-agents',
+  sessions: 'vma-sessions',
+  activeSession: 'vma-active-session',
+  messages: 'vma-messages',
+} as const
+
 export function safeSetItem(key: string, value: string): SaveResult {
   if (typeof window === 'undefined') return { ok: true }
   try {
