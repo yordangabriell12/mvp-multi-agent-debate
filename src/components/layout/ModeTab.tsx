@@ -13,11 +13,11 @@ const SPEED_OPTIONS: { value: LoopSpeed; label: string }[] = [
 ]
 
 const ROUND_OPTIONS: { value: number | 'unlimited'; label: string }[] = [
-  { value: 3, label: '3' },
+  { value: 1, label: '1: answers only' },
+  { value: 2, label: '2: one exchange' },
+  { value: 3, label: '3: debate' },
   { value: 5, label: '5' },
-  { value: 10, label: '10' },
-  { value: 20, label: '20' },
-  { value: 'unlimited', label: 'Unlimited' },
+  { value: 10, label: '10: max' },
 ]
 
 export function ModeTab() {
@@ -51,13 +51,13 @@ export function ModeTab() {
                 supportive: { loopSpeed: 'slow', maxRounds: 3 },
                 learning: { loopSpeed: 'slow', maxRounds: 3 },
                 war: { loopSpeed: 'fast', maxRounds: 1 },
-                custom: { loopSpeed: 'normal', maxRounds: 'unlimited' },
+                custom: { loopSpeed: 'normal', maxRounds: 1 },
               }
               const ps = presetSettings[presetKey]
               if (ps) setSettings(session.id, { loopSpeed: ps.loopSpeed as 'slow' | 'normal' | 'fast', maxRounds: ps.maxRounds })
               // Show system message
               const modeLabel = PRESET_MODES[presetKey]?.label || presetKey
-              addMessage(session.id, { role: 'system', content: '⚙️ Mode changed to ' + modeLabel + ' — ' + PRESET_MODES[presetKey]?.description, sessionId: session.id })
+              addMessage(session.id, { role: 'system', content: '⚙️ Mode changed to ' + modeLabel + ': ' + PRESET_MODES[presetKey]?.description, sessionId: session.id })
             }}
             className={cn(
               'w-full text-left px-3 py-2.5 rounded-lg border transition-colors',

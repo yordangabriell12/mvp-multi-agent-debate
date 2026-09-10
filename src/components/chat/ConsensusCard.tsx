@@ -14,7 +14,7 @@ export function ConsensusCard() {
           <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2" />
           <path d="M4.5 7l1.5 1.5 3.5-3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span className="text-xs text-ink-muted">Positions converging — continue or stop?</span>
+        <span className="text-xs text-ink-muted">Positions converging. Continue or stop?</span>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { type Session, type PresetMode, type ResponseMode, type SessionSettings 
 import { DEFAULT_AGENTS } from '@/types/agent'
 import { useChatStore } from '@/store/chatStore'
 import { generateId } from '@/lib/utils'
+import { STORAGE_KEYS } from '@/lib/storage'
 
 interface SessionState {
   sessions: Session[]
@@ -21,7 +22,11 @@ interface SessionState {
 
 const DEFAULT_SETTINGS: SessionSettings = {
   loopSpeed: 'normal',
-  maxRounds: 'unlimited',
+  // One round means the opening pass only, which is what "Normal" mode should
+  // be: ask, get answers, done. Multi-round debate is opt-in through the preset
+  // modes or the Max Rounds control, because each extra round re-calls every
+  // agent in the room and multiplies both cost and waiting time.
+  maxRounds: 1,
   moderatorEnabled: false,
   roleLock: false,
 }
@@ -29,8 +34,8 @@ const DEFAULT_SETTINGS: SessionSettings = {
 function loadSessions(): { sessions: Session[]; activeSessionId: string | null } {
   if (typeof window === 'undefined') return { sessions: [], activeSessionId: null }
   try {
-    const raw = localStorage.getItem('vma-sessions')
-    const rawId = localStorage.getItem('vma-active-session')
+    const raw = localStorage.getItem(STORAGE_KEYS.sessions)
+    const rawId = localStorage.getItem(STORAGE_KEYS.activeSession)
     if (raw) {
       const sessions = JSON.parse(raw)
       return { sessions, activeSessionId: rawId || (sessions[0]?.id ?? null) }
@@ -42,8 +47,8 @@ function loadSessions(): { sessions: Session[]; activeSessionId: string | null }
 function saveSessions(sessions: Session[], activeSessionId: string | null) {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem('vma-sessions', JSON.stringify(sessions))
-    if (activeSessionId) localStorage.setItem('vma-active-session', activeSessionId)
+    localStorage.setItem(STORAGE_KEYS.sessions, JSON.stringify(sessions))
+    if (activeSessionId) localStorage.setItem(STORAGE_KEYS.activeSession, activeSessionId)
   } catch { /* ignore */ }
 }
 

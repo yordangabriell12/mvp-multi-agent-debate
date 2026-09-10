@@ -81,7 +81,7 @@ export function ModelsModal() {
                   </select>
                 </div>
 
-                {/* Model select — auto-populated from provider */}
+                {/* Model select: auto-populated from provider */}
                 <div>
                   <label className="text-[10px] text-ink-muted block mb-1">Model</label>
                   <select
@@ -95,7 +95,7 @@ export function ModelsModal() {
                     {!currentModelValid && agent.model.modelName && (
                       <option value={agent.model.modelName}>{agent.model.modelName}</option>
                     )}
-                    {providerModels.length === 0 && <option value="">No models — add in API Keys</option>}
+                    {providerModels.length === 0 && <option value="">No models, add them in API Keys</option>}
                   </select>
                 </div>
               </div>

@@ -66,7 +66,7 @@ export function SubAgentSpawner({ onResult }: SubAgentSpawnerProps) {
           <input value={role} onChange={e => setRole(e.target.value)} placeholder="Role (e.g., Researcher)"
             className="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400" />
         </div>
-        <textarea value={task} onChange={e => setTask(e.target.value)} placeholder="Task description — what should the agent do?"
+        <textarea value={task} onChange={e => setTask(e.target.value)} placeholder="Task description: what should the agent do?"
           rows={2} className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400 resize-none" />
         <div className="flex items-center gap-2">
           <select value={model} onChange={e => setModel(e.target.value)}
@@ -92,7 +92,7 @@ export function SubAgentSpawner({ onResult }: SubAgentSpawnerProps) {
                 {a.status === 'running' ? '⏳' : a.status === 'done' ? '✅' : a.status === 'error' ? '❌' : '💤'}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-gray-900">{a.name} <span className="font-normal text-gray-500">— {a.role}</span></div>
+                <div className="text-xs font-semibold text-gray-900">{a.name} <span className="font-normal text-gray-500">, {a.role}</span></div>
                 {a.result && (
                   <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap line-clamp-4">{a.result}</div>
                 )}

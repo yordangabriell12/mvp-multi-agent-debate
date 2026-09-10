@@ -7,6 +7,7 @@ import { useDocumentStore } from '@/store/documentStore'
 import { usePendingStore } from '@/store/pendingStore'
 import type { Message } from '@/types/message'
 import { extractAgentTags, findAgentsInMessage, parseDecision, resolveRoundCap } from '@/lib/debate'
+import { QUALITY_RULES } from '@/lib/prompts'
 
 const MODE_PREFIXES: Record<string, string> = {
   boardroom: 'STYLE: Structured boardroom debate. Be direct, challenge assumptions, pressure-test ideas. Short and sharp.',
@@ -22,7 +23,18 @@ const DNL = NL + NL
 // LANGUAGE RULE: Always respond in the same language as the user
 const LANG_RULE = 'IMPORTANT: Always respond in the same language the user writes in. If the user writes in Indonesian, respond in Indonesian. If in English, respond in English. Match the user language exactly.'
 
-// Dedicated Moderator system prompt — NOT an agent
+/**
+ * Scales an artificial pause to the session's loop speed. These pauses exist so
+ * replies arrive in a readable order, not because the API is slow, so a fast
+ * session should barely pause at all.
+ */
+function speedDelay(speed: string | undefined, baseMs: number): number {
+  if (speed === 'fast') return Math.round(baseMs * 0.25)
+  if (speed === 'slow') return Math.round(baseMs * 1.75)
+  return baseMs
+}
+
+// Dedicated Moderator system prompt - NOT an agent
 const MODERATOR_SYSTEM = `You are an expert meeting moderator and facilitator. You are NOT one of the participants.
 
 CAPABILITIES: Call specific agents by name with targeted questions. Route questions to the RIGHT agent based on expertise. Challenge vague answers. Bridge conflicting points. Redirect off-topic discussions.
@@ -36,7 +48,7 @@ AGENT EXPERTISE MAP:
 RULES:
 - Always address agents by name, reference their expertise
 - Be concise: 2-3 sentences max
-- Never give opinions — only facilitate
+- Never give opinions - only facilitate
 - Highlight disagreements explicitly
 - Push for depth when answers are shallow
 - Use the same language as the discussion
@@ -54,10 +66,10 @@ TOPIC ROUTING:
 - CROSS-DOMAIN: call multiple agents
 
 QUALITY CHECK:
-- SHALLOW (< 80 words): use CLARIFY — "Can you be more specific?"
-- NO EVIDENCE: use CHALLENGE — "What data supports this?"
-- CONTRADICTION: use BRIDGE — "Agent A says X, Agent B says not-X. Reconcile."
-- OFF-TOPIC: use REDIRECT — "Let's focus on the core issue."
+- SHALLOW (< 80 words): use CLARIFY - "Can you be more specific?"
+- NO EVIDENCE: use CHALLENGE - "What data supports this?"
+- CONTRADICTION: use BRIDGE - "Agent A says X, Agent B says not-X. Reconcile."
+- OFF-TOPIC: use REDIRECT - "Let's focus on the core issue."
 - STRONG: acknowledge, move on
 
 DISAGREEMENTS: If agent A says X and B says not-X, prioritize it with BRIDGE or CHALLENGE. After 2 rounds unresolved, present both and move on.
@@ -176,11 +188,11 @@ export function useChat(sessionId: string) {
     const linesStr = lines.join(NL)
     const prefix = mp ? mp + DNL : ''
     if (isDebate) {
-      return [{ role: 'user' as const, content: 'You are ' + agentName + '. This is a HIGH-STAKES debate. Others below are THEIR OWN statements.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + 'DEBATE RULES:' + NL + '1. DISAGREE if you see flaws. Say "That is wrong because..." not "I see your point, but..."' + NL + '2. CHALLENGE weak evidence. Ask "Where is the data?" "Have you actually tested this?"' + NL + '3. Use SPECIFIC examples, numbers, cases. Vague claims get called out.' + NL + '4. Be CONCISE but SHARP. 4-6 sentences. Every sentence must add value.' + NL + '5. Do NOT include your name or title.' + NL + LANG_RULE + rag + DNL + linesStr + DNL + 'Respond now.' }]
+      return [{ role: 'user' as const, content: 'You are ' + agentName + '. This is a HIGH-STAKES debate. Others below are THEIR OWN statements.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + QUALITY_RULES + 'DEBATE RULES:' + NL + '1. DISAGREE if you see flaws. Say "That is wrong because..." not "I see your point, but..."' + NL + '2. CHALLENGE weak evidence. Ask "Where is the data?" "Have you actually tested this?"' + NL + '3. Use SPECIFIC examples, numbers, cases. Vague claims get called out.' + NL + '4. Be CONCISE but SHARP. 4-6 sentences. Every sentence must add value.' + NL + '5. Do NOT include your name or title.' + NL + LANG_RULE + rag + DNL + linesStr + DNL + 'Respond now.' }]
     }
     const questionToAnswer = moderatorQuestion || (latestUser?.content || '')
     const questionLabel = moderatorQuestion ? 'MODERATOR ASKS' : 'USER ASKS'
-    return [{ role: 'user' as const, content: 'You are ' + agentName + ', a participant in a multi-agent discussion room.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + webSearchBlock + 'INSTRUCTIONS:' + NL + '1. Respond to ' + questionLabel + ' below.' + NL + '2. Be concise.' + NL + '3. Do NOT include your name or title in response.' + NL + '4. Do not repeat earlier points. Reference what others said above.' + LANG_RULE + rag + DNL + questionLabel + ': "' + questionToAnswer + '"' + NL + 'Context:' + NL + (linesStr || '(first message)') + DNL + 'Respond.' }]
+    return [{ role: 'user' as const, content: 'You are ' + agentName + ', a participant in a multi-agent discussion room.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + webSearchBlock + QUALITY_RULES + 'INSTRUCTIONS:' + NL + '1. Respond to ' + questionLabel + ' below.' + NL + '2. Be concise.' + NL + '3. Do NOT include your name or title in response.' + NL + '4. Do not repeat earlier points. Reference what others said above.' + LANG_RULE + rag + DNL + questionLabel + ': "' + questionToAnswer + '"' + NL + 'Context:' + NL + (linesStr || '(first message)') + DNL + 'Respond.' }]
   }, [buildRagContext, getModePrefix])
 
   const getTargetAgents = useCallback((content: string): { id: string; name: string }[] => {
@@ -381,7 +393,7 @@ export function useChat(sessionId: string) {
       // Phase 1: Moderator opens
       addMessage(sessionId, { role: 'system', content: 'Moderator is facilitating this discussion.', sessionId })
 
-      // Detect greeting — if user just said hello, ask what they want to discuss first
+      // Detect greeting - if user just said hello, ask what they want to discuss first
       const trimmedContent = content.trim()
       const isGreeting = trimmedContent.length < 20 && /^(halo|hai|hi|hello|hey|selamat|pagi|siang|sore|malam|test|tes|yo|woi)\b/i.test(trimmedContent)
       let discussionTopic = content
@@ -397,7 +409,7 @@ export function useChat(sessionId: string) {
         discussionTopic = topicAnswer
       }
 
-      // Detect "no topic" response — if user says they don't have a topic yet, suggest some
+      // Detect "no topic" response - if user says they don't have a topic yet, suggest some
       const topicTrimmed = discussionTopic.trim()
       const isNoTopic = topicTrimmed.length < 20 && /^(belum|gak|tidak|enggak|nggak|belum ada|belum tahu|belum kepikiran|belum pikir|entah|terserah|bebas|random|apa aja|apa saja|ga ada|blm|blom)\b/i.test(topicTrimmed)
 
@@ -417,7 +429,7 @@ export function useChat(sessionId: string) {
       const openCtx = [{ role: 'user' as const, content: 'USER QUESTION: "' + discussionTopic + '"' + DNL + 'PARTICIPANTS: ' + agentList + DNL + 'Call the FIRST agent by name with a specific question based on their expertise. Max 2 sentences. ' + LANG_RULE }]
       await callMod(openCtx, modAgent)
 
-      // Phase 2: Agentic loop — moderator decides each step
+      // Phase 2: Agentic loop - moderator decides each step
       const agentsSpoken = new Set<string>()
       let followUpCount = 0
       const maxTotalTurns = roomAgents.length <= 2 ? 6 : roomAgents.length <= 4 ? 9 : 12 // adaptive to group size
@@ -515,7 +527,7 @@ export function useChat(sessionId: string) {
         const actionPrefix: Record<string, string> = {
           followup: 'Follow-up question',
           multi: 'Direct this question to both/all named agents',
-          clarify: 'The agent gave a vague answer — ask for specific details',
+          clarify: 'The agent gave a vague answer - ask for specific details',
           challenge: 'Challenge the agent with a counterpoint or request evidence',
           bridge: 'Connect the points of the named agents and ask how they relate',
           elaborate: 'Ask the agent to expand on a specific point they mentioned',
@@ -612,11 +624,13 @@ export function useChat(sessionId: string) {
       })()
 
       if (targets.length > 1) {
-        await new Promise((r) => setTimeout(r, 1500))
+        // Shorter than before: the gap is for readability, and 1.5s of dead air
+        // per extra agent reads as the app being slow.
+        await new Promise((r) => setTimeout(r, speedDelay(session.settings.loopSpeed, 600)))
         const remaining = targets.slice(1).map(async (target) => {
           const agent = agents.find((a) => a.id === target.id)
           if (!agent) return
-          await new Promise((r) => setTimeout(r, 500))
+          await new Promise((r) => setTimeout(r, speedDelay(session.settings.loopSpeed, 300)))
           const history = useChatStore.getState().messages[sessionId] || []
           const ctx = buildContext(history, agent.name, agent.id, agentsMap, liveResponses, false)
           const text = await callAgent(agent.id, ctx, (t) => { liveResponses[agent.id] = t })
@@ -638,6 +652,13 @@ export function useChat(sessionId: string) {
         round++
         setLoopRound(round)
         updateSession(session.id, { currentRound: round })
+        // Announce the round. Without this the extra calls look like the app
+        // hanging, which is exactly how it was reported.
+        addMessage(sessionId, {
+          role: 'system',
+          content: 'Round ' + round + ' of ' + loopCap + ': agents respond to each other',
+          sessionId,
+        })
         await Promise.all(roomAgents.map(async (agent) => {
           const hist = useChatStore.getState().messages[sessionId] || []
           const ctx = buildContext(hist, agent.name, agent.id, agentsMap, {}, true)
@@ -648,7 +669,7 @@ export function useChat(sessionId: string) {
           addMessage(sessionId, { role: 'system', content: 'Consensus reached after round ' + round, sessionId })
           break
         }
-        await new Promise((r) => setTimeout(r, session.settings.loopSpeed === 'slow' ? 2500 : session.settings.loopSpeed === 'fast' ? 500 : 1200))
+        await new Promise((r) => setTimeout(r, speedDelay(session.settings.loopSpeed, 900)))
       }
     }
 
@@ -774,7 +795,7 @@ export function useChat(sessionId: string) {
     }
   }, [providers, addMessage, sessionId])
 
-  // Silent moderator call — does NOT add to chat UI (used for decision-making)
+  // Silent moderator call - does NOT add to chat UI (used for decision-making)
   const callModSilent = useCallback(async (msgs: { role: 'user' | 'assistant'; content: string }[], modAgent: { id: string; name: string; systemPrompt: string; provider: string; modelName: string }): Promise<string> => {
     const provider = providers.find((p) => p.id === modAgent.provider)
     if (!provider?.apiKey) return ''
@@ -803,7 +824,7 @@ export function useChat(sessionId: string) {
           }
         }
       }
-      // NO addMessage here — this is invisible
+      // NO addMessage here - this is invisible
       return fullText
     } catch {
       return ''
