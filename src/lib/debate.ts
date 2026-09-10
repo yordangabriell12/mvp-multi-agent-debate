@@ -30,8 +30,24 @@ export interface RoomAgent extends NamedAgent {
   roleTitle: string
 }
 
-/** Ceiling applied to "unlimited": a forgotten session must not bill forever. */
+/**
+ * Ceiling applied to "unlimited": a forgotten session must not bill forever.
+ */
 export const UNLIMITED_ROUND_CEILING = 10
+
+/**
+ * Repairs a stored round setting.
+ *
+ * "unlimited" used to be the default and was clamped to 2 in practice, so a
+ * session still carrying it is a leftover rather than a choice someone made.
+ * It is no longer offered in the interface, so it is mapped to the current
+ * default instead of silently expanding to the ceiling.
+ */
+export function migrateRoundSetting(maxRounds: number | 'unlimited'): number {
+  if (maxRounds === 'unlimited') return 1
+  if (typeof maxRounds !== 'number' || !Number.isFinite(maxRounds)) return 1
+  return Math.min(Math.max(1, Math.floor(maxRounds)), UNLIMITED_ROUND_CEILING)
+}
 
 /**
  * Total rounds to run, where the opening round counts as one. So a configured

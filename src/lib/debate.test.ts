@@ -3,6 +3,7 @@ import {
   UNLIMITED_ROUND_CEILING,
   extractAgentTags,
   findAgentsInMessage,
+  migrateRoundSetting,
   parseDecision,
   resolveRoundCap,
   type RoomAgent,
@@ -43,6 +44,29 @@ describe('resolveRoundCap', () => {
 
   it('floors fractional values', () => {
     expect(resolveRoundCap(3.9)).toBe(3)
+  })
+})
+
+describe('migrateRoundSetting', () => {
+  // Without this, a session stored before the change kept "unlimited" and went
+  // on running ten rounds, so the fix would not reach existing users at all.
+  it('maps the retired "unlimited" default to the new default', () => {
+    expect(migrateRoundSetting('unlimited')).toBe(1)
+  })
+
+  it('leaves a deliberate choice alone', () => {
+    expect(migrateRoundSetting(2)).toBe(2)
+    expect(migrateRoundSetting(5)).toBe(5)
+  })
+
+  it('clamps a value beyond the ceiling', () => {
+    expect(migrateRoundSetting(999)).toBe(UNLIMITED_ROUND_CEILING)
+  })
+
+  it('repairs a missing or broken value', () => {
+    expect(migrateRoundSetting(Number.NaN)).toBe(1)
+    expect(migrateRoundSetting(0)).toBe(1)
+    expect(migrateRoundSetting(-3)).toBe(1)
   })
 })
 

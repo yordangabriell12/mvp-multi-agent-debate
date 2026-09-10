@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { type Session, type PresetMode, type ResponseMode, type SessionSettings } from '@/types/session'
 import { DEFAULT_AGENTS } from '@/types/agent'
 import { useChatStore } from '@/store/chatStore'
+import { migrateRoundSetting } from '@/lib/debate'
 import { generateId } from '@/lib/utils'
 import { STORAGE_KEYS } from '@/lib/storage'
 
@@ -37,7 +38,17 @@ function loadSessions(): { sessions: Session[]; activeSessionId: string | null }
     const raw = localStorage.getItem(STORAGE_KEYS.sessions)
     const rawId = localStorage.getItem(STORAGE_KEYS.activeSession)
     if (raw) {
-      const sessions = JSON.parse(raw)
+      const stored = JSON.parse(raw) as Session[]
+      // Repair round settings left over from when "unlimited" was the default.
+      // Without this an existing session would still run the long loop, so the
+      // fix would not apply to anyone who already had a session.
+      const sessions = stored.map((session) => ({
+        ...session,
+        settings: {
+          ...session.settings,
+          maxRounds: migrateRoundSetting(session.settings?.maxRounds as number | 'unlimited'),
+        },
+      }))
       return { sessions, activeSessionId: rawId || (sessions[0]?.id ?? null) }
     }
   } catch { /* ignore */ }
