@@ -1,6 +1,7 @@
 import type { ProviderConfig } from '@/types/provider'
 import { checkOutboundUrl } from '@/lib/netGuard'
 import { checkChatRateLimit, maxBodyBytes } from '@/lib/rateLimit'
+import { extractProviderError } from '@/lib/providerError'
 
 export const runtime = 'nodejs'
 
@@ -130,9 +131,7 @@ export async function POST(req: Request) {
 
       if (!response.ok) {
         const err = await response.text()
-        return new Response(JSON.stringify({ error: err }), {
-          status: response.status, headers: { 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ error: extractProviderError(err) }, response.status)
       }
 
       // Convert Anthropic SSE → `0:` format
@@ -187,9 +186,7 @@ export async function POST(req: Request) {
 
       if (!response.ok) {
         const err = await response.text()
-        return new Response(JSON.stringify({ error: err }), {
-          status: response.status, headers: { 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ error: extractProviderError(err) }, response.status)
       }
 
       // Convert SSE stream → `0:` format

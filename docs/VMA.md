@@ -46,6 +46,7 @@ status: live
 | [[08 Troubleshooting]] | Masalah yang pernah muncul dan solusinya |
 | [[09 Changelog]] | Riwayat perubahan |
 | [[10 Sinkronisasi Config]] | API key ikut ke perangkat lain, enkripsi, volume data |
+| [[11 Provider AI]] | Base URL, API key, Fetch models, arti pesan gagal |
 
 ### Referensi Asli
 - `PRD.md` di root repo: Product Requirements Document lengkap

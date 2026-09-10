@@ -198,7 +198,51 @@ Nilai `ink-faint` juga digelapkan dari `#9c9590` supaya border dan indikator fok
 
 ---
 
-## 7c. Pesan berhenti tersimpan tanpa peringatan
+## 7c. "Connection failed" padahal endpoint dan key benar
+
+> [!failure] Gejala
+> Base URL dan API key sudah benar, tetapi Test connection selalu gagal dengan pesan yang tidak menjelaskan apa pun.
+
+**Penyebab.** Dua hal bertumpuk:
+
+1. **Pesannya tidak informatif.** Provider membungkus alasan asli di dalam JSON bersarang, kadang di dalam JSON lagi, dan kadang dengan newline literal di dalam string sehingga JSON-nya bahkan tidak valid. Aplikasi hanya menampilkan "Connection failed".
+2. **Kegagalannya sering di tingkat model, bukan provider.** Kalau memakai gateway seperti 9Router, kunci dan base URL bisa benar sementara satu model tertentu gagal karena saldo upstream habis.
+
+**Perbaikan.** Dua-duanya sudah ditangani:
+
+- Alasan asli sekarang dibuka dari sarangnya dan ditampilkan. Lihat [[11 Provider AI]]
+- Ada tombol **Fetch models** supaya id model tidak perlu diketik manual
+
+> [!example] Kasus nyata: 9Router
+> Ditemukan dengan menguji langsung:
+>
+> | Model | Hasil | Arti |
+> | --- | --- | --- |
+> | `gpt-4o` | `429` | Saldo OpenAI habis |
+> | `olagon/claude-opus-4-8` | `402` | Butuh pembayaran |
+> | `Cline-Combo` | `200` | Berfungsi |
+> | `for-hermes` | `200` | Berfungsi |
+> | `opencode-model` | `200` | Berfungsi |
+>
+> Jadi **base URL dan key-nya benar**. Yang gagal adalah model-model tertentu. Solusinya pilih model yang berfungsi, atau isi ulang saldo upstream.
+
+**Cara memastikan sendiri:**
+
+```bash
+KEY='sk-...'; BASE='https://9router.yordangabriell.my.id/v1'
+# Key dan endpoint benar kalau ini membalas daftar model
+curl -s -H "Authorization: Bearer $KEY" "$BASE/models" | head -c 200
+# Lalu uji model spesifik
+curl -s -X POST "$BASE/chat/completions" -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"Cline-Combo","messages":[{"role":"user","content":"Say OK"}],"max_tokens":10}'
+```
+
+**Status.** Selesai. Pesan gagal sekarang bisa dibaca, misal: *"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."*
+
+---
+
+## 7d. Pesan berhenti tersimpan tanpa peringatan
 
 > [!failure] Gejala
 > Percakapan panjang berjalan normal, tetapi setelah refresh sebagian pesan hilang.

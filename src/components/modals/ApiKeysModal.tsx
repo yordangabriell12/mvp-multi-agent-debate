@@ -6,6 +6,12 @@ import { useModalStore } from '@/store/modalStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { cn } from '@/lib/utils'
 
+/** Outcome of a connection test, kept so the reason can be shown, not hidden. */
+interface ProbeResult {
+  ok: boolean
+  detail: string
+}
+
 export function ApiKeysModal() {
   const activeModal = useModalStore((s) => s.activeModal)
   const closeModal = useModalStore((s) => s.closeModal)
@@ -19,17 +25,18 @@ export function ApiKeysModal() {
   const [newModelName, setNewModelName] = useState('')
   const [addModelTo, setAddModelTo] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
-  const [testResults, setTestResults] = useState<Record<string, 'ok' | 'fail' | null>>({})
+  const [testResults, setTestResults] = useState<Record<string, ProbeResult | undefined>>({})
+  const [fetchingModels, setFetchingModels] = useState<string | null>(null)
   const [modelId, setModelId] = useState('')
   const [modelName, setModelName] = useState('')
 
   const handleTest = async (providerId: string) => {
     const prov = providers.find((p) => p.id === providerId)
     setTesting(providerId)
-    setTestResults((p) => ({ ...p, [providerId]: null }))
+    setTestResults((p) => ({ ...p, [providerId]: undefined }))
 
     if (!prov?.apiKey) {
-      setTestResults((p) => ({ ...p, [providerId]: 'fail' }))
+      setTestResults((p) => ({ ...p, [providerId]: { ok: false, detail: 'Add an API key first.' } }))
       setTesting(null)
       return
     }
@@ -37,10 +44,12 @@ export function ApiKeysModal() {
     // for a reason that has nothing to do with the key.
     const modelName = prov.models[0]?.id
     if (!modelName) {
-      setTestResults((p) => ({ ...p, [providerId]: 'fail' }))
+      setTestResults((p) => ({ ...p, [providerId]: { ok: false, detail: 'Add at least one model first.' } }))
       setTesting(null)
       return
     }
+
+    setTestResults((p) => ({ ...p, [providerId]: { ok: true, detail: `Asking ${modelName}...` } }))
 
     try {
       const res = await fetch('/api/chat', {
@@ -48,15 +57,105 @@ export function ApiKeysModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [{ role: 'user', content: 'Say OK' }],
-          agent: { id: 'test', name: 'Test', systemPrompt: 'Reply with just OK', provider: prov.id, modelName },
+          agent: {
+            id: 'test',
+            name: 'Test',
+            systemPrompt: 'Reply with just OK',
+            provider: prov.id,
+            modelName,
+          },
           providers: [prov],
         }),
       })
-      setTestResults((p) => ({ ...p, [providerId]: res.ok ? 'ok' : 'fail' }))
-    } catch {
-      setTestResults((p) => ({ ...p, [providerId]: 'fail' }))
+
+      if (res.ok) {
+        setTestResults((p) => ({
+          ...p,
+          [providerId]: { ok: true, detail: `${modelName} answered successfully.` },
+        }))
+        return
+      }
+
+      // The route already unwraps nested provider errors, so this is the reason.
+      const data = await res.json().catch(() => ({}))
+      const detail = typeof data?.error === 'string' && data.error ? data.error : `Request failed with ${res.status}.`
+      setTestResults((p) => ({ ...p, [providerId]: { ok: false, detail } }))
+    } catch (err) {
+      setTestResults((p) => ({
+        ...p,
+        [providerId]: {
+          ok: false,
+          detail: err instanceof Error ? err.message : 'Could not reach the server.',
+        },
+      }))
     } finally {
       setTesting(null)
+    }
+  }
+
+  /**
+   * Pulls the model list from the provider so ids do not have to be typed by
+   * hand. Existing entries are kept: a provider can offer models it does not
+   * list, and re-fetching must not delete them.
+   */
+  const handleFetchModels = async (providerId: string) => {
+    const prov = providers.find((p) => p.id === providerId)
+    if (!prov) return
+
+    setFetchingModels(providerId)
+    setTestResults((p) => ({ ...p, [providerId]: undefined }))
+
+    try {
+      const res = await fetch('/api/providers/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: prov.baseUrl, apiKey: prov.apiKey, id: prov.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setTestResults((p) => ({
+          ...p,
+          [providerId]: { ok: false, detail: data?.error || `Could not list models (${res.status}).` },
+        }))
+        return
+      }
+
+      const ids: string[] = Array.isArray(data?.models) ? data.models : []
+      const existing = new Set(prov.models.map((m) => m.id))
+      const added = ids.filter((id) => !existing.has(id))
+
+      if (ids.length === 0) {
+        setTestResults((p) => ({
+          ...p,
+          [providerId]: { ok: false, detail: 'The provider returned an empty model list.' },
+        }))
+        return
+      }
+
+      if (added.length > 0) {
+        updateProvider(providerId, {
+          models: [...prov.models, ...added.map((id) => ({ id, name: id }))],
+        })
+      }
+
+      setTestResults((p) => ({
+        ...p,
+        [providerId]: {
+          ok: true,
+          detail:
+            added.length > 0
+              ? `Added ${added.length} model${added.length === 1 ? '' : 's'}.`
+              : 'All listed models were already added.',
+        },
+      }))
+    } catch {
+      setTestResults((p) => ({
+        ...p,
+        [providerId]: { ok: false, detail: 'Could not reach the server.' },
+      }))
+    } finally {
+      setFetchingModels(null)
     }
   }
   if (activeModal !== 'apiKeys') return null
@@ -164,7 +263,7 @@ export function ApiKeysModal() {
                     <input type="password" value={provider.apiKey} onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })} placeholder="sk-..." className="w-full px-3 py-1.5 text-sm font-mono bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint" />
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-start gap-2 flex-wrap">
                     <button
                       onClick={() => handleTest(provider.id)}
                       disabled={!hasKey || provider.models.length === 0 || testing === provider.id}
@@ -172,17 +271,32 @@ export function ApiKeysModal() {
                     >
                       {testing === provider.id ? 'Testing...' : 'Test connection'}
                     </button>
-                    {testResults[provider.id] === 'ok' && (
-                      <span className="text-[11px] text-sage">Connection OK</span>
-                    )}
-                    {testResults[provider.id] === 'fail' && (
-                      <span className="text-[11px] text-rust">Connection failed</span>
-                    )}
-                    {!hasKey && <span className="text-[11px] text-ink-muted">Add a key first</span>}
-                    {hasKey && provider.models.length === 0 && (
-                      <span className="text-[11px] text-ink-muted">Add a model first</span>
-                    )}
+                    <button
+                      onClick={() => handleFetchModels(provider.id)}
+                      disabled={!hasKey || fetchingModels === provider.id}
+                      title="Fetch the model list from this provider"
+                      className="px-3 py-1.5 text-[11px] text-ink-muted border border-border rounded-md hover:text-ink hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-sand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {fetchingModels === provider.id ? 'Fetching...' : 'Fetch models'}
+                    </button>
+                    {!hasKey && <span className="text-[11px] text-ink-muted py-1.5">Add a key first</span>}
                   </div>
+
+                  {testResults[provider.id] && (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className={cn(
+                        'text-[11px] rounded-md border px-2.5 py-2 leading-relaxed break-words',
+                        testResults[provider.id]?.ok
+                          ? 'text-sage border-sage/30 bg-sage-light'
+                          : 'text-rust border-rust/30 bg-rust-light'
+                      )}
+                    >
+                      {testResults[provider.id]?.ok ? 'Connection OK. ' : 'Failed. '}
+                      {testResults[provider.id]?.detail}
+                    </div>
+                  )}
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
