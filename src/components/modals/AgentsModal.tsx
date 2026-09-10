@@ -7,6 +7,7 @@ import { useAgentStore } from '@/store/agentStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { AGENT_COLORS, type AgentTone } from '@/types/agent'
 import { cn, getInitials } from '@/lib/utils'
+import { ImproveButton } from '@/components/common/ImproveButton'
 
 export function AgentsModal() {
   const activeModal = useModalStore((s) => s.activeModal)
@@ -89,7 +90,16 @@ export function AgentsModal() {
             <div className="flex gap-2 pt-2">{AGENT_COLORS.map((c) => (<button key={c} onClick={() => setForm({ ...form, color: c })} className={cn('w-6 h-6 rounded-full transition-transform', form.color === c && 'ring-2 ring-offset-2 ring-sand-700')} style={{ backgroundColor: c }} />))}</div>
           </div>
         </div>
-        <div><label className="text-[11px] text-ink-muted block mb-1">System Prompt</label>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[11px] text-ink-muted">System Prompt</label>
+            <ImproveButton
+              mode="persona"
+              label="Improve prompt"
+              getText={() => form.prompt}
+              onImproved={(text) => setForm({ ...form, prompt: text })}
+            />
+          </div>
           <textarea value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} rows={3} className="w-full px-3 py-2 text-sm bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint resize-none" />
         </div>
       </div>

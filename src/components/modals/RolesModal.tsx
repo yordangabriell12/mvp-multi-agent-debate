@@ -3,6 +3,7 @@
 import { Modal } from './Modal'
 import { useModalStore } from '@/store/modalStore'
 import { useAgentStore } from '@/store/agentStore'
+import { ImproveButton } from '@/components/common/ImproveButton'
 
 export function RolesModal() {
   const activeModal = useModalStore((s) => s.activeModal)
@@ -16,10 +17,18 @@ export function RolesModal() {
       <div className="space-y-4 max-h-[60vh] overflow-y-auto">
         {agents.map((agent) => (
           <div key={agent.id}>
-            <label className="text-xs font-medium block mb-1.5">
-              <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: agent.avatarColor }} />
-              {agent.name} — {agent.roleTitle}
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium">
+                <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: agent.avatarColor }} />
+                {agent.name}, {agent.roleTitle}
+              </label>
+              <ImproveButton
+                mode="persona"
+                label="Improve prompt"
+                getText={() => agent.systemPrompt}
+                onImproved={(text) => updateAgent(agent.id, { systemPrompt: text })}
+              />
+            </div>
             <textarea
               value={agent.systemPrompt}
               onChange={(e) => updateAgent(agent.id, { systemPrompt: e.target.value })}

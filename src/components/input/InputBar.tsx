@@ -5,6 +5,7 @@ import { useSessionStore } from '@/store/sessionStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useDocumentStore } from '@/store/documentStore'
 import { cn, getInitials } from '@/lib/utils'
+import { ImproveButton } from '@/components/common/ImproveButton'
 
 interface InputBarProps {
   sessionId: string
@@ -142,7 +143,7 @@ export function InputBar({ sessionId, onSend, loading, onStop }: InputBarProps) 
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-2 px-1">
+        <div className="flex items-center gap-3 mt-2 px-1">
           <span className="text-[11px] text-ink-muted">
             <code className="px-1 py-0.5 bg-surface-inset rounded text-ink-muted font-mono text-[10px]">@Name</code> tag an agent
             <span className="mx-1">·</span>
@@ -150,6 +151,20 @@ export function InputBar({ sessionId, onSend, loading, onStop }: InputBarProps) 
             <span className="mx-1">·</span>
             no tag = auto
           </span>
+          <ImproveButton
+            className="ml-auto"
+            mode="chat"
+            label="Improve message"
+            getText={() => taRef.current?.value || ''}
+            onImproved={(text) => {
+              const ta = taRef.current
+              if (!ta) return
+              ta.value = text
+              ta.style.height = 'auto'
+              ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'
+              ta.focus()
+            }}
+          />
         </div>
       </form>
     </div>
