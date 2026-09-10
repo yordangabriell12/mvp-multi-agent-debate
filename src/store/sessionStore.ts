@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { type Session, type PresetMode, type ResponseMode, type SessionSettings } from '@/types/session'
 import { DEFAULT_AGENTS } from '@/types/agent'
+import { useChatStore } from '@/store/chatStore'
 import { generateId } from '@/lib/utils'
 
 interface SessionState {
@@ -101,6 +102,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ? (sessions[0]?.id ?? null)
         : state.activeSessionId
       saveSessions(sessions, activeSessionId)
+      // Drop the conversation too. Without this the messages stayed in
+      // localStorage forever and kept filling the 5 MB budget.
+      useChatStore.getState().clearMessages(id)
       return { sessions, activeSessionId }
     }),
 
