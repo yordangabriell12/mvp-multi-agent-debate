@@ -106,6 +106,56 @@ Alasan yang paling sering muncul, dan artinya:
 
 ---
 
+## 4b. Kesalahan Paling Sering: Nama Model Salah
+
+> [!danger] Ini penyebab nomor satu "Connection failed"
+> Key benar, base URL benar, tapi nama modelnya tidak dikenal provider. Hasilnya `400`, dan kalau pesannya tidak dibaca, tampak seperti masalah koneksi.
+
+Contoh nyata yang pernah terjadi:
+
+| Field | Nilai | Status |
+| --- | --- | --- |
+| Base URL | `https://api.deepseek.com` | ✅ benar |
+| API key | 35 karakter `sk-...` | ✅ valid |
+| Model | `Deep-seek` | ❌ **tidak dikenal** |
+
+Provider mengatakannya sendiri:
+
+```
+The supported API model names are deepseek-flash, deepseek-v4-pro,
+but you passed Deep-seek
+```
+
+### Cara menghindarinya
+
+> [!tip] Selalu klik **Fetch models** sebelum mengetik manual
+> Tombol itu membaca daftar resmi dari provider, jadi id model yang salah ketik tidak mungkin terjadi.
+
+### Model yang sudah dikonfirmasi berfungsi
+
+| Provider | Model |
+| --- | --- |
+| DeepSeek | `deepseek-chat`, `deepseek-reasoner`, `deepseek-flash`, `deepseek-v4-pro` |
+
+> [!note] Nama model itu id teknis, bukan nama tampilan
+> Yang dipakai untuk memanggil API adalah **id**, bukan nama yang ditulis di kolom "Display name". `Deep-seek` terlihat benar sebagai nama, tapi bukan id yang provider kenali. Nama boleh apa saja; **id** yang menentukan.
+
+---
+
+## 4c. Base URL: Kapan Perlu `/v1`
+
+| Provider | Base URL | Catatan |
+| --- | --- | --- |
+| DeepSeek | `https://api.deepseek.com/v1` | Bentuk tanpa `/v1` juga jalan |
+| OpenAI | `https://api.openai.com/v1` | Wajib |
+| 9Router | `https://9router.yordangabriell.my.id/v1` | Wajib |
+| Anthropic | `https://api.anthropic.com` | **Tanpa** `/v1`; aplikasi menambahkan sendiri |
+
+> [!important] Aplikasi menambahkan `/chat/completions` ke base URL
+> Jadi base URL harus berhenti di `/v1` atau di domain, bukan di `/v1/chat/completions`. Kalau keliru, hasilnya `404`.
+
+---
+
 ## 5. Uji dari Luar Aplikasi
 
 Untuk memisahkan masalah aplikasi dari masalah provider, uji langsung dengan curl:
