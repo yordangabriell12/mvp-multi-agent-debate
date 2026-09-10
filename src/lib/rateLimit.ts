@@ -82,3 +82,48 @@ export function recordFailure(key: string): void {
 export function clearFailures(key: string): void {
   buckets.delete(key)
 }
+
+// --- Global backstop -------------------------------------------------------
+//
+// Per-IP keys can be sidestepped: when the origin is reached directly (bypassing
+// Cloudflare) the X-Forwarded-For header is attacker-controlled, so every request
+// can present a fresh "IP". Bytes cannot be spoofed by header, so cap the total
+// failure rate as well. Normal traffic never reaches these numbers.
+
+const GLOBAL_WINDOW_MS = 10 * 60 * 1000
+const GLOBAL_SOFT_LIMIT = 15
+const GLOBAL_HARD_LIMIT = 40
+const GLOBAL_COOLDOWN_MS = 120 * 1000
+const MAX_GLOBAL_SAMPLES = 5000
+
+let globalFailures: number[] = []
+
+export interface GlobalPressure {
+  /** Extra pause to add before answering, in milliseconds. */
+  extraDelayMs: number
+  blocked: boolean
+  retryAfterSeconds: number
+}
+
+export function globalPressure(): GlobalPressure {
+  const now = Date.now()
+  globalFailures = globalFailures.filter((at) => now - at < GLOBAL_WINDOW_MS)
+  const count = globalFailures.length
+
+  if (count >= GLOBAL_HARD_LIMIT) {
+    return { extraDelayMs: 0, blocked: true, retryAfterSeconds: Math.ceil(GLOBAL_COOLDOWN_MS / 1000) }
+  }
+  if (count >= GLOBAL_SOFT_LIMIT) {
+    const extraDelayMs = Math.min(3000, 500 + (count - GLOBAL_SOFT_LIMIT) * 100)
+    return { extraDelayMs, blocked: false, retryAfterSeconds: 0 }
+  }
+  return { extraDelayMs: 0, blocked: false, retryAfterSeconds: 0 }
+}
+
+export function recordGlobalFailure(): void {
+  globalFailures.push(Date.now())
+  if (globalFailures.length > MAX_GLOBAL_SAMPLES) {
+    globalFailures = globalFailures.slice(-MAX_GLOBAL_SAMPLES)
+  }
+}
+

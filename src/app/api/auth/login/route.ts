@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createSessionToken, safeEmailMatch, verifyPassword, SESSION_COOKIE } from '@/lib/auth'
-import { checkRateLimit, clearFailures, recordFailure } from '@/lib/rateLimit'
+import {
+  checkRateLimit,
+  clearFailures,
+  globalPressure,
+  recordFailure,
+  recordGlobalFailure,
+} from '@/lib/rateLimit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -11,6 +17,11 @@ const SESSION_TTL_SECONDS = 60 * 60 * 12 // 12 hours
 const FAILURE_DELAY_MS = 500
 
 function clientIp(req: Request): string {
+  // Cloudflare overwrites CF-Connecting-IP on every request it proxies, so it
+  // is preferred when present. X-Forwarded-For is only a fallback.
+  const cfIp = req.headers.get('cf-connecting-ip')?.trim()
+  if (cfIp) return cfIp
+
   const forwarded = req.headers.get('x-forwarded-for')
   if (forwarded) return forwarded.split(',')[0].trim()
   return req.headers.get('x-real-ip')?.trim() || 'unknown'
@@ -24,8 +35,16 @@ function isHttps(req: Request): boolean {
 
 export async function POST(req: Request) {
   const ip = clientIp(req)
-  const limit = checkRateLimit(ip)
 
+  const pressure = globalPressure()
+  if (pressure.blocked) {
+    return NextResponse.json(
+      { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
+      { status: 429, headers: { 'Retry-After': String(pressure.retryAfterSeconds) } }
+    )
+  }
+
+  const limit = checkRateLimit(ip)
   if (!limit.allowed) {
     return NextResponse.json(
       { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
@@ -66,7 +85,10 @@ export async function POST(req: Request) {
 
   if (!emailOk || !passwordOk) {
     recordFailure(ip)
-    await new Promise((resolve) => setTimeout(resolve, FAILURE_DELAY_MS))
+    recordGlobalFailure()
+    await new Promise((resolve) =>
+      setTimeout(resolve, FAILURE_DELAY_MS + globalPressure().extraDelayMs)
+    )
     return NextResponse.json({ error: 'Email atau password salah.' }, { status: 401 })
   }
 
