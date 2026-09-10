@@ -140,7 +140,30 @@ Lalu di Nginx Proxy Manager, buat proxy host:
 
 ---
 
-## 7. Perintah Harian
+## 7. Variabel Lingkungan
+
+| Variabel | Wajib | Bawaan | Fungsi |
+| --- | --- | --- | --- |
+| `VMA_AUTH_EMAIL` | ya | | Email login |
+| `VMA_AUTH_PASSWORD_HASH` | ya | | Hash PBKDF2 dari password |
+| `VMA_AUTH_PASSWORD` | tidak | | Password teks asli, hanya fallback. Tidak disarankan |
+| `VMA_SESSION_SECRET` | ya | | Kunci HMAC penanda tangan cookie |
+| `VMA_ALLOW_PRIVATE_BASEURL` | tidak | `false` | Set `true` hanya kalau provider AI ada di jaringan privat |
+| `VMA_CHAT_MAX_REQUESTS` | tidak | `150` | Batas panggilan `/api/chat` per IP |
+| `VMA_CHAT_WINDOW_SECONDS` | tidak | `300` | Jendela waktu untuk batas di atas |
+| `VMA_MAX_BODY_BYTES` | tidak | `1000000` | Ukuran body maksimal untuk `/api/chat` |
+
+> [!tip] Kalau sering kena 429
+> Mode moderator dengan banyak agent memanggil `/api/chat` berkali-kali per giliran. Naikkan batasnya kalau pemakaian normal ikut terblokir:
+> ```
+> VMA_CHAT_MAX_REQUESTS=400
+> VMA_CHAT_WINDOW_SECONDS=300
+> ```
+> Lalu `docker compose up -d`. Hitungannya disimpan di memori proses, jadi restart mengosongkannya.
+
+---
+
+## 8. Perintah Harian
 
 | Kebutuhan | Perintah |
 | --- | --- |
@@ -153,7 +176,7 @@ Lalu di Nginx Proxy Manager, buat proxy host:
 
 ---
 
-## 8. Checklist Setelah Deploy
+## 9. Checklist Setelah Deploy
 
 > [!success] Verifikasi wajib
 > - [ ] `docker compose ps` menampilkan status `healthy`
@@ -166,7 +189,7 @@ Lalu di Nginx Proxy Manager, buat proxy host:
 
 ---
 
-## 9. Backup
+## 10. Backup
 
 VMA menyimpan seluruh data pengguna di **browser**, jadi tidak ada data aplikasi di server yang perlu di-backup. Yang perlu disimpan hanyalah:
 

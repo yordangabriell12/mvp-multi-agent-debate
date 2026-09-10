@@ -45,13 +45,18 @@ updated: 2026-09-10
 ### INK: teks
 | Token | Hex | Kontras di putih | Pakai untuk |
 | --- | --- | --- | --- |
-| `ink` | `#1a1816` | ~19:1 | Teks utama |
-| `ink-light` | `#3d3833` | ~11:1 | Teks medium kuat |
-| `ink-muted` | `#6b6560` | ~5.7:1 | Teks sekunder |
-| `ink-faint` | `#9c9590` | ~2.9:1 | ⚠️ label, gagal WCAG AA |
+| `ink` | `#1a1816` | ~17.7:1 | Teks utama |
+| `ink-light` | `#3d3833` | ~11.6:1 | Teks medium kuat |
+| `ink-muted` | `#6b6560` | ~5.7:1 | Teks sekunder dan label |
+| `ink-faint` | `#8a8480` | ~3.7:1 | **Non-teks saja**: border, pembatas, goresan ikon |
 
-> [!warning] Tentang `ink-faint`
-> Kontrasnya sekitar 2.9:1, di bawah ambang WCAG AA (4.5:1) untuk teks normal. Aman hanya untuk elemen dekoratif. Untuk label yang perlu dibaca, pakai `ink-muted`. Lihat [[08 Troubleshooting]].
+> [!warning] `ink-faint` bukan untuk teks
+> Nilainya sekitar 3.7:1, di bawah ambang WCAG AA (4.5:1) untuk teks normal. Karena itu perannya dipisahkan:
+>
+> - **Teks** memakai `ink-muted` (sekitar 5.7:1)
+> - **Border, pembatas, dan ikon** memakai `ink-faint`, yang cukup untuk ambang 3:1 elemen non-teks
+>
+> Sebelumnya `ink-faint` bernilai `#9c9590` dan hanya mencapai 2.95:1, sehingga gagal untuk teks **dan** sedikit di bawah ambang untuk ikon. Nilainya digelapkan, dan seluruh pemakaian untuk teks dipindah ke `ink-muted`.
 
 ### SURFACE dan BORDER
 | Token | Hex | Pakai untuk |
@@ -144,6 +149,13 @@ updated: 2026-09-10
 
 > [!tip] Gerak yang punya alasan
 > Setiap animasi menandai sesuatu yang baru muncul. Tidak ada animasi dekoratif yang berjalan terus-menerus, sesuai dial MOTION 1.
+
+### Indikator fokus
+
+Setiap kontrol yang bisa difokuskan punya cincin fokus `focus-visible:ring-2 ring-sand-500`. Warna `sand-400` sebelumnya dipakai untuk cincin ini dan terlalu terang (sekitar 2.3:1), di bawah ambang 3:1 untuk indikator fokus, sehingga dinaikkan ke `sand-500`.
+
+> [!note] Kenapa pakai `focus-visible`, bukan `focus`
+> `focus-visible` hanya menampilkan cincin saat pengguna menavigasi dengan keyboard, jadi klik mouse tidak memunculkan cincin yang mengganggu. Ini yang membuat `outline: none` aman dipakai bersamaan.
 
 ---
 

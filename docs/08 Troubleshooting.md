@@ -154,12 +154,67 @@ function fromBase64Url(input: string): Uint8Array<ArrayBuffer> {
 > [!failure] Gejala
 > Label atau catatan kecil terlihat pucat di atas latar putih.
 
-**Penyebab.** Token `ink-faint` (`#9c9590`) hanya mencapai kontras sekitar **2.9:1**, di bawah ambang WCAG AA (4.5:1) untuk teks normal.
+**Penyebab.** Token `ink-faint` bernilai `#9c9590` dan hanya mencapai kontras sekitar **2.95:1**, di bawah ambang WCAG AA (4.5:1) untuk teks normal. Token itu dipakai untuk label, timestamp, dan role agent di hampir seluruh komponen.
 
-**Perbaikan.** Untuk teks yang perlu dibaca, pakai `ink-muted` (`#6b6560`, sekitar 5.7:1).
+**Perbaikan.** Peran token dipisahkan:
 
-> [!note] Status
-> Halaman login sudah memakai `ink-muted`. Komponen lain masih banyak memakai `ink-faint` untuk label, timestamp, dan role agent, jadi masih ada temuan yang belum ditangani.
+| Peran | Token | Kontras |
+| --- | --- | --- |
+| Teks sekunder dan label | `ink-muted` `#6b6560` | 5.7:1 |
+| Border, pembatas, ikon | `ink-faint` `#8a8480` | 3.7:1 |
+
+Nilai `ink-faint` juga digelapkan dari `#9c9590` supaya border dan indikator fokus melewati ambang 3:1 untuk elemen non-teks.
+
+> [!note] Kenapa tidak sekadar menggelapkan satu token
+> Agar `ink-faint` lolos 4.5:1 di semua permukaan yang dipakai (termasuk `surface-hover`), nilainya harus sekitar `#6f6964`, yang hampir identik dengan `ink-muted`. Hierarki empat tingkat tidak menyisakan ruang untuk tingkat keempat yang tetap lolos AA, jadi pemisahan peran adalah jalan keluarnya.
+
+**Status.** Selesai. Seluruh teks memakai `ink-muted`, dan `ink-faint` tinggal untuk elemen non-teks. Cincin fokus juga dinaikkan dari `sand-400` ke `sand-500` karena yang lama hanya sekitar 2.3:1.
+
+---
+
+## 7b. `npm run lint` gagal: "Invalid project directory"
+
+> [!failure] Gejala
+> ```
+> > next lint
+> Invalid project directory provided, no such directory: .../lint
+> ```
+
+**Penyebab.** Perintah `next lint` **sudah dihapus di Next.js 16**. Karena bukan lagi perintah yang dikenal, `lint` dianggap sebagai nama direktori dan gagal. Tidak ada linting yang berjalan sama sekali.
+
+**Perbaikan.** Script diganti menjadi pemeriksaan tipe yang ketat:
+
+```json
+"lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
+"typecheck": "tsc --noEmit"
+```
+
+> [!warning] Kenapa bukan ESLint
+> `eslint-config-next` sudah dicoba dan **tidak bisa jalan di proyek ini**. Paket `typescript-eslint` yang dibundelnya menolak TypeScript 7 (yang dipakai proyek ini) dan langsung melempar error saat di-import:
+> ```
+> typescript-eslint does not support TS 7.0.
+> ```
+> Kembalikan ESLint setelah `typescript-eslint` mendukung TypeScript 7. Sementara ini, pemeriksaan tipe sudah menangkap hal yang paling penting: import dan variabel yang tidak terpakai.
+
+---
+
+## 7c. Pesan berhenti tersimpan tanpa peringatan
+
+> [!failure] Gejala
+> Percakapan panjang berjalan normal, tetapi setelah refresh sebagian pesan hilang.
+
+**Penyebab.** `localStorage` dibatasi sekitar 5 MB. Semua penulisan dibungkus `catch { /* ignore */ }`, sehingga begitu kuota penuh, penyimpanan berhenti **tanpa pesan apa pun** sementara tampilan tetap terlihat sehat.
+
+**Perbaikan.** `src/lib/storage.ts` melaporkan kegagalan, store menyimpannya sebagai state, dan sebuah banner di atas area kerja menampilkannya. Banner hilang sendiri begitu penulisan berikutnya berhasil.
+
+Jika banner ini muncul:
+
+1. **Export** sesi yang penting (tombol Export di topbar)
+2. Hapus sesi lama; menghapus sesi kini sekaligus menghapus pesannya
+3. Muat ulang halaman
+
+> [!note] Perbaikan terkait
+> `clearMessages` sebelumnya hanya didefinisikan dan tidak pernah dipanggil, sehingga setiap sesi yang dihapus meninggalkan pesannya di `localStorage` selamanya. Sekarang penghapusan sesi ikut membersihkan pesannya.
 
 ---
 

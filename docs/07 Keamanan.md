@@ -122,7 +122,13 @@ const forwarded = req.headers.get('x-forwarded-for')
 - Nama host: `localhost`, `metadata`, `metadata.google.internal`, dan sejenisnya
 - Sufiks: `.local`, `.internal`, `.home.arpa`
 - IPv4 privat: `10.x`, `172.16-31.x`, `192.168.x`, `127.x`, `169.254.x`, `100.64-127.x`
-- IPv6 privat: `::1`, `fc00::/7`, `fe80::/10`, termasuk IPv4-mapped
+- IPv6 privat: `::1`, `fc00::/7`, `fe80::/10`
+- IPv4-mapped dalam bentuk apa pun
+
+> [!bug] Celah yang ditemukan lewat test
+> Pemeriksaan IPv4-mapped semula tidak pernah aktif. Parser URL bukan hanya menerima bentuk bertitik: `::ffff:127.0.0.1` ditulis ulang menjadi `::ffff:7f00:1` (hex), sehingga pola bertitik tidak cocok dan loopback tetap bisa dijangkau. Kedua bentuk kini ditangani, termasuk bentuk panjang `0:0:0:0:0:ffff:127.0.0.1`.
+>
+> Celah ini ditemukan oleh `src/lib/netGuard.test.ts`, bukan oleh pemeriksaan manual.
 
 > [!note] Kalau kamu memang butuh provider lokal
 > Set `VMA_ALLOW_PRIVATE_BASEURL=true` untuk mematikan guard ini. Hanya lakukan kalau provider AI kamu benar-benar berada di jaringan privat, misalnya Ollama yang di-host sendiri.
@@ -138,6 +144,23 @@ const forwarded = req.headers.get('x-forwarded-for')
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+
+---
+
+## 5b. Pengaman Biaya di `/api/chat`
+
+> [!important] Endpoint termahal, bukan endpoint login
+> Login sudah dijaga berlapis, tetapi `/api/chat` yang justru **mengeluarkan biaya** sempat terbuka. Cookie yang bocor, atau klien yang lepas kendali, bisa memanggil provider AI tanpa batas.
+
+| Pengaman | Bawaan | Ubah lewat |
+| --- | --- | --- |
+| Batas permintaan per IP | 150 per 5 menit | `VMA_CHAT_MAX_REQUESTS`, `VMA_CHAT_WINDOW_SECONDS` |
+| Ukuran body maksimal | 1 MB | `VMA_MAX_BODY_BYTES` |
+
+> [!tip] Kenapa angkanya longgar
+> Satu giliran debat memanggil endpoint ini berkali-kali: setiap keputusan moderator, setiap jawaban agent, dan setiap pemeriksaan konsensus adalah satu permintaan. Batas yang ketat akan memutus pemakaian normal. Tujuannya menahan klien yang lepas kendali, bukan membatasi pemakaian wajar.
+>
+> Body dibaca sebagai teks lebih dulu dan ditolak dengan `413` sebelum di-parse, jadi payload raksasa tidak pernah masuk ke parser JSON.
 
 ---
 

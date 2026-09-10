@@ -57,13 +57,43 @@ Tiap agent punya `memory` (catatan lintas sesi) dan `skills` (kemampuan dengan k
 | **Knowledge Base** | Dokumen | Upload per-agent atau general |
 
 ### 2.2 Uji koneksi provider
-Tombol uji mengirim permintaan kecil (`"Say OK"`) ke endpoint yang dikonfigurasi, lalu menandai hasilnya berhasil atau gagal.
+Tombol **Test connection** mengirim permintaan kecil (`"Say OK"`) ke endpoint yang dikonfigurasi, lalu menampilkan **Connection OK** atau **Connection failed**. Tombol dinonaktifkan kalau API key atau model belum diisi, dengan alasannya ditulis di sebelah tombol.
 
 > [!tip] Auto-heal
 > Kalau sebuah provider dihapus, agent yang menunjuk ke provider itu otomatis dialihkan ke provider lain yang punya API key. Tidak ada agent yang tertinggal dalam keadaan rusak.
 
-### 2.3 Mode dan kecepatan loop
+### 2.3 Temperature per agent
+Di modal **Manage Agents**, field **Temperature** (0 sampai 2, langkah 0.1) mengatur kreativitas tiap agent secara terpisah.
+
+> [!note] Dua hal yang perlu diketahui
+> - Dikosongkan berarti memakai nilai bawaan provider.
+> - **Diabaikan oleh reasoning model** (seri `o1`, `o3`). Model seperti itu menolak parameter temperature, jadi sistem tidak mengirimkannya.
+
+### 2.4 Mode dan kecepatan loop
 Lima preset mode plus pengaturan manual untuk kecepatan dan batas giliran. Mengganti mode otomatis menyesuaikan kecepatan dan batas giliran, lalu mencatat perubahan sebagai pesan sistem di chat.
+
+> [!important] Max Rounds sekarang benar-benar berfungsi
+> **Max Rounds** adalah jumlah giliran **total**, termasuk giliran pembuka. Jadi:
+> - `1` berarti hanya giliran pembuka, tanpa putaran tambahan
+> - `3` berarti tiga giliran penuh
+> - `Unlimited` tetap dibatasi 10 giliran supaya sesi yang terlupakan tidak menagih biaya terus-menerus
+>
+> Sebelumnya nilai ini dibatasi paksa ke 2, sehingga memilih 20 pun hanya menjalankan satu putaran tambahan.
+
+### 2.5 Pause dan Stop
+Tombol **Pause** benar-benar menghentikan langkah debat berikutnya, dan **Resume** melanjutkannya.
+
+> [!warning] Batas otomatis
+> Kalau sesi dibiarkan dalam keadaan pause, loop akan melanjutkan sendiri setelah 15 menit. Ini mencegah satu permintaan menggantung tanpa batas di server.
+
+### 2.6 Pencarian web
+Agent bisa diberi kemampuan mencari. Aktifkan lewat flag pencarian pada agent, lalu satu pencarian dijalankan per pertanyaan dan hasilnya dibagikan ke semua agent yang mengaktifkannya.
+
+> [!note] Hemat permintaan
+> Pencarian dijalankan **sekali per pertanyaan**, bukan sekali per agent. Kalau tidak ada agent yang mengaktifkan pencarian, tidak ada permintaan tambahan sama sekali. Hasilnya diambil dari API Wikipedia dan tidak butuh API key.
+
+### 2.7 Role Lock
+Kalau **Role Lock** dinyalakan, setiap agent diminta tetap berada di dalam perannya dan menyerahkan pertanyaan di luar keahliannya kepada rekan yang tepat.
 
 ---
 
@@ -118,8 +148,20 @@ Endpoint `/api/search` mengambil hasil dari API Wikipedia, menampilkan judul, ku
 
 > [!warning] Jujur soal batasan
 > - Tombol **Share Room** di sidebar kanan dan **Share** di topbar belum punya aksi. Perlu diimplementasikan atau dihapus.
-> - Fitur bertanda butuh backend Python (`CodeInterpreter`, `BrowserView`, `KnowledgePanel`, `PPTViewer`, `SubAgentSpawner`) belum ada backend-nya di deployment saat ini.
-> - Beberapa komponen (`ConsensusCard`, `SubAgentSpawner`, `KnowledgePanel`, `TaskScheduler`) ada di kode tetapi belum dipanggil dari `ChatArea`.
+> - Fitur yang bergantung pada backend Python (`CodeInterpreter`, `BrowserView`, `KnowledgePanel`, `PPTViewer`, `SubAgentSpawner`) belum berfungsi di deployment saat ini karena backend-nya belum ada.
+> - `PPTViewer` sekarang menampilkan slide yang dikirim bersama pesan (`metadata.pptSlides`), tetapi belum ada komponen yang memproduksi data itu.
+> - Empat komponen (`ConsensusCard`, `SubAgentSpawner`, `KnowledgePanel`, `TaskScheduler`) ada di kode namun belum dipanggil dari `ChatArea`.
+
+> [!note] Yang sudah dihapus karena menyesatkan
+> Toggle **Chat / Code / Browse** dan tombol **Attach web page** serta **Attach knowledge** di kotak input sudah dihilangkan. Ketiganya hanya mengubah placeholder atau menampung data yang kemudian dibuang, sehingga terlihat berfungsi padahal tidak. Upload berkas tetap ada karena benar-benar tersimpan.
+
+### Batas konsumsi
+> [!important] Pengaman biaya di `/api/chat`
+> Endpoint ini membakar biaya setiap panggilan, jadi sekarang dibatasi:
+> - Maksimal **150 permintaan per 5 menit** per alamat IP (bisa diubah lewat `VMA_CHAT_MAX_REQUESTS` dan `VMA_CHAT_WINDOW_SECONDS`)
+> - Ukuran body maksimal **1 MB** (bisa diubah lewat `VMA_MAX_BODY_BYTES`)
+>
+> Angka bawaannya sengaja longgar: satu giliran debat memanggil endpoint ini berkali-kali, jadi batas yang ketat akan mengganggu pemakaian normal. Tujuannya menahan klien yang lepas kendali, bukan membatasi pemakaian wajar.
 
 ---
 
