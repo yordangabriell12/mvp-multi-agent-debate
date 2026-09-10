@@ -72,7 +72,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 text-sm text-ink bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint focus-visible:ring-2 focus-visible:ring-sand-400 transition-colors"
+                className="w-full px-3 py-2 text-sm text-ink bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint focus-visible:ring-2 focus-visible:ring-sand-500 transition-colors"
               />
             </div>
 
@@ -88,7 +88,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 text-sm text-ink bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint focus-visible:ring-2 focus-visible:ring-sand-400 transition-colors"
+                className="w-full px-3 py-2 text-sm text-ink bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint focus-visible:ring-2 focus-visible:ring-sand-500 transition-colors"
               />
             </div>
 
@@ -105,7 +105,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={submitting || !email || !password}
-              className="w-full px-4 py-2 text-sm font-medium text-white bg-sand-800 rounded-md hover:bg-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-sand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full px-4 py-2 text-sm font-medium text-white bg-sand-800 rounded-md hover:bg-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-sand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {submitting ? 'Signing in...' : 'Sign in'}
             </button>

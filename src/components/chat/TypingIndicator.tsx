@@ -25,7 +25,7 @@ export function TypingIndicator({ name, color, status, icon = 'agent' }: TypingI
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1">
           <span className="text-sm font-medium" style={icon === 'moderator' ? {} : { color }}>{name}</span>
-          <span className="text-[10px] text-ink-faint italic">{status || 'thinking'}</span>
+          <span className="text-[10px] text-ink-muted italic">{status || 'thinking'}</span>
         </div>
         <div className="flex items-center gap-1.5 py-1">
           <span className="w-1.5 h-1.5 rounded-full bg-ink-faint animate-bounce" style={{ animationDelay: '0ms' }} />

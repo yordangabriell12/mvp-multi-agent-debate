@@ -61,17 +61,17 @@ export function ModelsModal() {
                   {agent.name[0]}
                 </div>
                 <div className="text-xs font-medium text-ink">{agent.name}</div>
-                <div className="text-[10px] text-ink-faint truncate">{agent.roleTitle}</div>
+                <div className="text-[10px] text-ink-muted truncate">{agent.roleTitle}</div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 {/* Provider select */}
                 <div>
-                  <label className="text-[10px] text-ink-faint block mb-1">Provider</label>
+                  <label className="text-[10px] text-ink-muted block mb-1">Provider</label>
                   <select
                     value={agent.model.provider}
                     onChange={(e) => handleProviderChange(agent.id, e.target.value)}
-                    className={cn('w-full px-2.5 py-1.5 text-xs bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint', !hasKey && 'text-ink-faint')}
+                    className={cn('w-full px-2.5 py-1.5 text-xs bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint', !hasKey && 'text-ink-muted')}
                   >
                     {providers.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -83,7 +83,7 @@ export function ModelsModal() {
 
                 {/* Model select — auto-populated from provider */}
                 <div>
-                  <label className="text-[10px] text-ink-faint block mb-1">Model</label>
+                  <label className="text-[10px] text-ink-muted block mb-1">Model</label>
                   <select
                     value={agent.model.modelName}
                     onChange={(e) => updateAgent(agent.id, { model: { ...agent.model, modelName: e.target.value } })}

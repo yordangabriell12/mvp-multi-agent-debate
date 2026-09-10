@@ -83,7 +83,7 @@ export function SessionItem({ session, agents, isActive, onClick }: SessionItemP
           {!editing && (
             <button
               onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-              className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-faint hover:text-ink-muted hover:bg-surface-inset transition-all"
+              className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-muted hover:text-ink-muted hover:bg-surface-inset transition-all"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <circle cx="6" cy="3" r="1" fill="currentColor" />
@@ -93,7 +93,7 @@ export function SessionItem({ session, agents, isActive, onClick }: SessionItemP
             </button>
           )}
         </div>
-        <div className="text-[11px] text-ink-faint mt-0.5 pl-4 truncate">
+        <div className="text-[11px] text-ink-muted mt-0.5 pl-4 truncate">
           {agentNames} · {formatRelativeTime(session.updatedAt)}
         </div>
       </div>

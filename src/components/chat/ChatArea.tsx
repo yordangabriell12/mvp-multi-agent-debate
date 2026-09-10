@@ -7,7 +7,6 @@ import { ModeratorBubble } from './ModeratorBubble'
 import { UserBubble } from './UserBubble'
 import { SystemMessage } from './SystemMessage'
 import { TypingIndicator } from './TypingIndicator'
-import { CodeBlock } from './CodeBlock'
 import { CodeInterpreter } from './CodeInterpreter'
 import { HTMLPreview } from './HTMLPreview'
 import { BrowserView } from './BrowserView'
@@ -83,7 +82,7 @@ export function ChatArea({ sessionId, streaming }: ChatAreaProps) {
                 return (
                   <div key={msg.id}>
                     {msg.content && <ChatBubble name="VMA" role="System" color="#6d28d9" content={msg.content} timestamp={msg.createdAt} />}
-                    <PPTViewer filename={msg.metadata?.pptFilename} />
+                    <PPTViewer slides={msg.metadata?.pptSlides} filename={msg.metadata?.pptFilename} />
                   </div>
                 )
               }

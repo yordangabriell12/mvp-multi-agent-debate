@@ -6,6 +6,7 @@ import { useSessionStore } from '@/store/sessionStore'
 import { useDocumentStore } from '@/store/documentStore'
 import { usePendingStore } from '@/store/pendingStore'
 import type { Message } from '@/types/message'
+import { extractAgentTags, findAgentsInMessage, parseDecision, resolveRoundCap } from '@/lib/debate'
 
 const MODE_PREFIXES: Record<string, string> = {
   boardroom: 'STYLE: Structured boardroom debate. Be direct, challenge assumptions, pressure-test ideas. Short and sharp.',
@@ -70,37 +71,15 @@ ACTIONS: FOLLOWUP/CLARIFY/CHALLENGE/BRIDGE/ELABORATE/REDIRECT/MULTI/POLL/SUMMARY
 OUTPUT: {"action":"TYPE","agents":["Name"],"question":"q","topic":"FINANCIAL|LEGAL|SALES|CROSS"}
 SUMMARY: {"action":"SUMMARY"}`
 
-// Extract agent names mentioned in text
-function findAgentsInMessage(text: string, roomAgents: { id: string; name: string; roleTitle: string }[]): { id: string; name: string }[] {
-  const found: { id: string; name: string }[] = []
-  const lower = text.toLowerCase()
-  for (const agent of roomAgents) {
-    if (lower.includes(agent.name.toLowerCase()) || lower.includes('@' + agent.name.toLowerCase())) {
-      found.push({ id: agent.id, name: agent.name })
-    }
-  }
-  return found
-}
-
-// Extract @mentions from agent response (for agent-to-agent tags)
-function extractAgentTags(text: string, roomAgents: { id: string; name: string }[]): string[] {
-  const tags: string[] = []
-  const mentionPattern = text.match(/@(\w+)/g)
-  if (!mentionPattern) return tags
-  for (const mention of mentionPattern) {
-    const name = mention.slice(1).toLowerCase()
-    const agent = roomAgents.find(a => a.name.toLowerCase() === name)
-    if (agent) tags.push(agent.name)
-  }
-  return [...new Set(tags)]
-}
-
 export function useChat(sessionId: string) {
   const [streaming, setStreaming] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [loopRound, setLoopRound] = useState(0)
   const abortRef = useRef<AbortController[]>([])
   const stoppedRef = useRef(false)
+  // Web search results for the current user question, filled once per send and
+  // reused for every agent that has web search enabled.
+  const webSearchRef = useRef('')
   const agents = useAgentStore((s) => s.agents)
   const providers = useSettingsStore((s) => s.providers)
   const addMessage = useChatStore((s) => s.addMessage)
@@ -124,7 +103,7 @@ export function useChat(sessionId: string) {
 
   const buildContext = useCallback((
     history: Message[], agentName: string, agentId: string,
-    agentsMap: Record<string, string>, liveResponses: Record<string, string>, isDebate = false, moderatorQuestion = "", webSearchResults = ""
+    agentsMap: Record<string, string>, liveResponses: Record<string, string>, isDebate = false, moderatorQuestion = ""
   ): { role: 'user' | 'assistant'; content: string }[] => {
     const userMsgs = history.filter((m) => m.role === 'user')
     const latestUser = userMsgs[userMsgs.length - 1]
@@ -148,6 +127,10 @@ export function useChat(sessionId: string) {
       personaBlock += 'Depth: ' + (persona.depth > 0.7 ? 'Give thorough detailed responses with examples.' : persona.depth > 0.4 ? 'Give balanced responses.' : 'Keep responses brief and focused.') + NL
       personaBlock += 'Confidence: ' + (persona.confidence > 0.7 ? 'Be assertive. State position clearly.' : 'Express uncertainty where appropriate.') + NL
       personaBlock += 'Adapt length to topic complexity. Simple = 2-3 sentences. Complex = up to 5 sentences.' + NL
+      // Role Lock: keep the agent inside the remit it was configured for.
+      if (session?.settings.roleLock) {
+        personaBlock += 'Stay strictly within your assigned role. If a question falls outside your expertise, say so briefly and defer to the colleague who owns it.' + NL
+      }
     }
     let skillsBlock = ''
     if (skills.length > 0) {
@@ -167,10 +150,13 @@ export function useChat(sessionId: string) {
       }
       memoryBlock += 'Example: weave experience naturally. E.g. "From what I have seen with similar situations..."' + NL
     }
-    // Web search injection
+    // Web search injection. The results are fetched once per user question
+    // before any agent is called (see prepareWebSearch) and stored in a ref, so
+    // every agent that opted in sees the same result set without extra calls.
     let webSearchBlock = ''
-    if (agent?.webSearch && moderatorQuestion) {
-          }
+    if (agent?.webSearch && webSearchRef.current) {
+      webSearchBlock = DNL + webSearchRef.current + NL
+    }
 
     const mp = getModePrefix()
     const recent = history.slice(-100)
@@ -212,9 +198,67 @@ export function useChat(sessionId: string) {
     return (scored[0]?.score > 0 ? scored.filter((s) => s.score > 0).slice(0, 2) : scored.slice(0, 1)).map((a) => ({ id: a.id, name: a.name }))
   }, [agents, session])
 
+  /**
+   * Fetches web results for the question and stores a formatted block in a ref
+   * for buildContext. Skipped entirely when no agent in the room has web search
+   * enabled, so the default path makes no extra request.
+   */
+  const prepareWebSearch = useCallback(async (query: string): Promise<void> => {
+    webSearchRef.current = ''
+    const question = query.trim()
+    if (!question) return
+
+    const anyAgentSearches = agents.some(
+      (a) => session?.agentIds.includes(a.id) && a.webSearch
+    )
+    if (!anyAgentSearches) return
+
+    try {
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: question.slice(0, 300) }),
+      })
+      if (!res.ok) return
+
+      const data = await res.json()
+      const results: { title?: string; snippet?: string; url?: string }[] =
+        Array.isArray(data?.results) ? data.results : []
+      if (results.length === 0) return
+
+      const lines = results.slice(0, 5).map((r) =>
+        '- ' + (r.title || 'Untitled') + ': ' +
+        (r.snippet || '').replace(/\s+/g, ' ').slice(0, 300) +
+        (r.url ? ' (' + r.url + ')' : '')
+      )
+      webSearchRef.current =
+        'WEB SEARCH RESULTS for "' + question.slice(0, 120) + '":' + NL +
+        lines.join(NL) + NL +
+        'Use these only where relevant. If they do not cover the question, say the data is limited.'
+    } catch {
+      webSearchRef.current = ''
+    }
+  }, [agents, session])
+
+  /**
+   * Parks the debate loop while the session is paused. Bounded so a session left
+   * paused overnight eventually resumes instead of holding the request forever.
+   */
+  const waitWhilePaused = useCallback(async (): Promise<void> => {
+    const MAX_PAUSE_MS = 15 * 60 * 1000
+    const TICK_MS = 400
+    let waited = 0
+    while (!stoppedRef.current && waited < MAX_PAUSE_MS) {
+      const status = useSessionStore.getState().sessions.find((s) => s.id === sessionId)?.status
+      if (status !== 'paused') return
+      await new Promise((r) => setTimeout(r, TICK_MS))
+      waited += TICK_MS
+    }
+  }, [sessionId])
+
   const callAgent = useCallback(async (
     agentId: string, chatMessages: { role: 'user' | 'assistant'; content: string }[],
-    onText?: (text: string) => void, signal?: AbortSignal, overridePrompt?: string
+    onText?: (text: string) => void, overridePrompt?: string
   ): Promise<string> => {
     const agent = agents.find((a) => a.id === agentId)
     if (!agent) return ''
@@ -226,7 +270,7 @@ export function useChat(sessionId: string) {
       setStreaming((prev) => ({ ...prev, [agent.id]: 'formulating response' }))
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: chatMessages, agent: { id: agent.id, name: agent.name, systemPrompt: overridePrompt || agent.systemPrompt, provider: provider.id, modelName: agent.model.modelName }, providers: providers.filter((p) => p.apiKey) }),
+        body: JSON.stringify({ messages: chatMessages, agent: { id: agent.id, name: agent.name, systemPrompt: overridePrompt || agent.systemPrompt, provider: provider.id, modelName: agent.model.modelName, temperature: agent.model.temperature }, providers: providers.filter((p) => p.apiKey) }),
         signal: controller.signal,
       })
       if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed') }
@@ -274,7 +318,7 @@ export function useChat(sessionId: string) {
     const provider = providers.find((p) => p.id === first.model.provider)
     if (!provider?.apiKey) return false
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user' as const, content: 'CONSENSUS or CONTINUE?' + DNL + lines }], agent: { id: first.id, name: first.name, systemPrompt: 'Reply one word: CONSENSUS or CONTINUE.', provider: provider.id, modelName: first.model.modelName }, providers: providers.filter((p) => p.apiKey) }) })
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user' as const, content: 'CONSENSUS or CONTINUE?' + DNL + lines }], agent: { id: first.id, name: first.name, systemPrompt: 'Reply one word: CONSENSUS or CONTINUE.', provider: provider.id, modelName: first.model.modelName, temperature: 0 }, providers: providers.filter((p) => p.apiKey) }) })
       const reader = res.body?.getReader(); if (!reader) return false
       const decoder = new TextDecoder(); let text = ''
       while (true) { const { done, value } = await reader.read(); if (done) break; text += decoder.decode(value, { stream: true }) }
@@ -368,6 +412,8 @@ export function useChat(sessionId: string) {
         discussionTopic = topicAnswer2
       }
 
+      await prepareWebSearch(discussionTopic)
+
       const openCtx = [{ role: 'user' as const, content: 'USER QUESTION: "' + discussionTopic + '"' + DNL + 'PARTICIPANTS: ' + agentList + DNL + 'Call the FIRST agent by name with a specific question based on their expertise. Max 2 sentences. ' + LANG_RULE }]
       await callMod(openCtx, modAgent)
 
@@ -386,6 +432,9 @@ export function useChat(sessionId: string) {
       if (initialTargets.length === 0) initialTargets = [roomAgents[0]] // fallback: first agent
 
       for (const target of initialTargets) {
+        if (stoppedRef.current) break
+        await waitWhilePaused()
+        if (stoppedRef.current) break
         setLoopRound(totalTurns + 2)
         updateSession(session.id, { currentRound: totalTurns + 2 })
         const hist = useChatStore.getState().messages[sessionId] || []
@@ -429,6 +478,9 @@ export function useChat(sessionId: string) {
       while (!wantsSummary) {
       // Phase 2b: Moderator decision loop
       while (followUpCount < 3 && totalTurns < maxTotalTurns) {
+        if (stoppedRef.current) break
+        await waitWhilePaused()
+        if (stoppedRef.current) break
         const hist = useChatStore.getState().messages[sessionId] || []
         const transcript = buildTranscript(hist, agentsMap, lastUser?.content || content, roomAgents.map(a => a.name), followUpCount)
 
@@ -490,6 +542,9 @@ export function useChat(sessionId: string) {
           : allTargets
 
         for (const ft of pollTargets) {
+          if (stoppedRef.current) break
+          await waitWhilePaused()
+          if (stoppedRef.current) break
           const hist3 = useChatStore.getState().messages[sessionId] || []
           const agentCtx = buildContext(hist3, ft.name, ft.id, agentsMap, {}, false, decision.question || '')
           await callAgent(ft.id, agentCtx)
@@ -540,7 +595,9 @@ export function useChat(sessionId: string) {
       await callMod(sumCtx, modAgent)
       addMessage(sessionId, { role: 'system', content: 'Discussion complete.', sessionId })
 
-    } else {// ========== NORMAL MODE ==========    } else {// ========== NORMAL MODE ==========
+    } else {
+      // ========== NORMAL MODE ==========
+      await prepareWebSearch(content)
       const targets = getTargetAgents(content)
       const liveResponses: Record<string, string> = {}
 
@@ -570,9 +627,14 @@ export function useChat(sessionId: string) {
         await firstAgentPromise
       }
 
-      const loopCap = session.settings.maxRounds === 'unlimited' ? 2 : Math.min(session.settings.maxRounds, 2)
+      // Total rounds including the opening one. See resolveRoundCap for why
+      // this is not clamped to a fixed number.
+      const loopCap = resolveRoundCap(session.settings.maxRounds)
       let round = 1
       while (round < loopCap) {
+        if (stoppedRef.current) break
+        await waitWhilePaused()
+        if (stoppedRef.current) break
         round++
         setLoopRound(round)
         updateSession(session.id, { currentRound: round })
@@ -592,36 +654,7 @@ export function useChat(sessionId: string) {
 
     updateSession(session.id, { status: 'idle' })
     setLoading(false)
-  }, [session, sessionId, agents, providers, getTargetAgents, buildContext, callAgent, checkConsensus, updateSession, addMessage])
-
-  // Parse structured decision from moderator LLM output
-  type DecisionAction = 'followup' | 'multi' | 'clarify' | 'challenge' | 'bridge' | 'elaborate' | 'redirect' | 'poll' | 'summary'
-  interface ModeratorDecision {
-    action: DecisionAction
-    agents?: string[]
-    question?: string
-  }
-  const parseDecision = (text: string): ModeratorDecision => {
-    // Try JSON parse first (new format)
-    try {
-      const jsonMatch = text.match(/\{[^}]+\}/)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0])
-        if (parsed.action && parsed.action !== 'summary') {
-          const agents = Array.isArray(parsed.agents) ? parsed.agents : (parsed.agent ? [parsed.agent] : [])
-          return { action: parsed.action.toLowerCase(), agents, question: parsed.question || undefined }
-        }
-        return { action: 'summary' }
-      }
-    } catch { /* fall through to legacy parse */ }
-    // Legacy fallback: ACTION: FOLLOWUP / SUMMARY
-    const actionMatch = text.match(/ACTION:\s*(SUMMARY|FOLLOWUP)/i)
-    if (!actionMatch || actionMatch[1].toUpperCase() === 'SUMMARY') return { action: 'summary' }
-    const agentMatch = text.match(/AGENT:\s*(.+)/i)
-    const questionMatch = text.match(/QUESTION:\s*(.+)/i)
-    if (!agentMatch || !questionMatch) return { action: 'summary' }
-    return { action: 'followup', agents: [agentMatch[1].trim()], question: questionMatch[1].trim() }
-  }
+  }, [session, sessionId, agents, providers, getTargetAgents, buildContext, callAgent, checkConsensus, updateSession, addMessage, prepareWebSearch, waitWhilePaused])
 
   // Build transcript for moderator decision-making
   const buildTranscript = useCallback((

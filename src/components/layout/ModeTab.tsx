@@ -34,7 +34,7 @@ export function ModeTab() {
 
   return (
     <div className="p-3 space-y-2">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint block mb-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted block mb-2">
         Preset Mode
       </span>
       {Object.entries(PRESET_MODES).map(([key, mode]) => {
@@ -68,13 +68,13 @@ export function ModeTab() {
               <span className="text-sm">{mode.icon}</span>
               <span className={cn('text-xs font-medium', isActive ? 'text-ink' : 'text-ink-light')}>{mode.label}</span>
             </div>
-            <p className="text-[11px] text-ink-faint leading-relaxed pl-6">{mode.description}</p>
+            <p className="text-[11px] text-ink-muted leading-relaxed pl-6">{mode.description}</p>
           </button>
         )
       })}
 
       <div className="mt-4 pt-3 border-t border-border">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint block mb-2">Loop Settings</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted block mb-2">Loop Settings</span>
         <div className="space-y-1">
           {/* Speed dropdown */}
           <div className="relative">
@@ -85,7 +85,7 @@ export function ModeTab() {
               <span className="text-xs text-ink-muted">Speed</span>
               <div className="flex items-center gap-1">
                 <span className="text-xs text-ink-light capitalize">{session.settings.loopSpeed}</span>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-ink-faint">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-ink-muted">
                   <path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
@@ -114,7 +114,7 @@ export function ModeTab() {
               <span className="text-xs text-ink-muted">Max Rounds</span>
               <div className="flex items-center gap-1">
                 <span className="text-xs text-ink-light">{session.settings.maxRounds === 'unlimited' ? 'Unlimited' : session.settings.maxRounds}</span>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-ink-faint">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-ink-muted">
                   <path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>

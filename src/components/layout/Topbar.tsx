@@ -41,7 +41,7 @@ export function Topbar({ title, meta }: TopbarProps) {
       <div className="flex items-center gap-3 min-w-0">
         <h1 className="text-sm font-semibold text-ink truncate">{title}</h1>
         {meta && (
-          <span className="text-xs text-ink-faint shrink-0">{meta}</span>
+          <span className="text-xs text-ink-muted shrink-0">{meta}</span>
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">

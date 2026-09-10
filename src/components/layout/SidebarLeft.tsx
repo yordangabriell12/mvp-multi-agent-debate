@@ -41,7 +41,7 @@ export function SidebarLeft() {
           </div>
           <button
             onClick={() => setCollapsed(true)}
-            className="w-6 h-6 flex items-center justify-center rounded text-ink-faint hover:text-ink-muted hover:bg-surface-hover transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink-muted hover:bg-surface-hover transition-colors"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -62,7 +62,7 @@ export function SidebarLeft() {
         </div>
 
         <div className="px-3 mb-1">
-          <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">Recent</span>
+          <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Recent</span>
         </div>
         <div className="flex-1 overflow-y-auto px-2">
           {mounted ? (
@@ -77,11 +77,11 @@ export function SidebarLeft() {
                 />
               ))}
               {sessions.length === 0 && (
-                <p className="px-2 py-6 text-xs text-ink-faint text-center">No sessions yet</p>
+                <p className="px-2 py-6 text-xs text-ink-muted text-center">No sessions yet</p>
               )}
             </>
           ) : (
-            <p className="px-2 py-6 text-xs text-ink-faint text-center">No sessions yet</p>
+            <p className="px-2 py-6 text-xs text-ink-muted text-center">No sessions yet</p>
           )}
         </div>
 
@@ -99,7 +99,7 @@ export function SidebarLeft() {
       {collapsed && (
         <button
           onClick={() => setCollapsed(false)}
-          className="fixed left-2 top-1/2 -translate-y-1/2 z-50 w-7 h-12 bg-surface-raised border border-border rounded-lg flex items-center justify-center text-ink-faint hover:text-ink-muted hover:bg-surface-hover transition-colors shadow-sm"
+          className="fixed left-2 top-1/2 -translate-y-1/2 z-50 w-7 h-12 bg-surface-raised border border-border rounded-lg flex items-center justify-center text-ink-muted hover:text-ink-muted hover:bg-surface-hover transition-colors shadow-sm"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

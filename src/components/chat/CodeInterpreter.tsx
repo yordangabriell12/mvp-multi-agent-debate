@@ -21,7 +21,6 @@ export function CodeInterpreter({ initialCode = '', onResult }: CodeInterpreterP
   const [code, setCode] = useState(initialCode)
   const [output, setOutput] = useState<CodeOutput | null>(null)
   const [running, setRunning] = useState(false)
-  const [history, setHistory] = useState<{ code: string; output: CodeOutput }[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -44,7 +43,6 @@ export function CodeInterpreter({ initialCode = '', onResult }: CodeInterpreterP
       })
       const result: CodeOutput = await res.json()
       setOutput(result)
-      setHistory(prev => [...prev, { code, output: result }])
       onResult?.(result)
     } catch (err) {
       setOutput({ stdout: '', stderr: `Connection error: ${err}`, success: false, output_images: [] })
@@ -61,7 +59,7 @@ export function CodeInterpreter({ initialCode = '', onResult }: CodeInterpreterP
   }
 
   return (
-    <div className="rounded-lg border border-[var(--border)] overflow-hidden my-3 bg-[#1e1e2e]">
+    <div className="rounded-lg border border-[var(--color-border)] overflow-hidden my-3 bg-[#1e1e2e]">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#181825] border-b border-[#313244]">
         <span className="text-[10px] font-mono text-[#a6adc8] uppercase">🐍 Python Interpreter</span>

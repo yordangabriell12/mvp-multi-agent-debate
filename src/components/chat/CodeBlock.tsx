@@ -25,7 +25,7 @@ export function CodeBlock({ code, language = 'python', showRun = true, onRun, is
   const displayCode = expanded || !isLong ? code : code.split('\n').slice(0, 20).join('\n') + '\n// ...'
 
   return (
-    <div className="rounded-lg border border-[var(--border)] overflow-hidden my-3 bg-[#1e1e2e]">
+    <div className="rounded-lg border border-[var(--color-border)] overflow-hidden my-3 bg-[#1e1e2e]">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#181825] border-b border-[#313244]">
         <div className="flex items-center gap-2">

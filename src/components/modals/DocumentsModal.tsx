@@ -59,18 +59,18 @@ export function DocumentsModal() {
         onDrop={async (e) => { e.preventDefault(); setDragOver(false); await handleFiles(e.dataTransfer.files) }}
       >
         <input ref={fileRef} type="file" multiple accept=".pdf,.md,.txt,.json,.csv,.doc,.docx,.xlsx" onChange={(e) => handleFiles(e.target.files)} className="hidden" />
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="mx-auto mb-1.5 text-ink-faint">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="mx-auto mb-1.5 text-ink-muted">
           <path d="M13 11v2.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5V11M9 2v7M6 4.5L9 1.5l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <p className="text-xs text-ink-muted">Drop files here or click to browse</p>
-        <p className="text-[10px] text-ink-faint mt-0.5">
+        <p className="text-[10px] text-ink-muted mt-0.5">
           {activeTab === 'general' ? 'Upload to general knowledge base' : `Upload to ${agents.find((a) => a.id === activeTab)?.name}\'s knowledge base`}
         </p>
       </div>
 
       <div className="space-y-1 max-h-[35vh] overflow-y-auto">
         {filtered.length === 0 ? (
-          <p className="text-xs text-ink-faint text-center py-6">No documents in this knowledge base</p>
+          <p className="text-xs text-ink-muted text-center py-6">No documents in this knowledge base</p>
         ) : filtered.map((doc) => {
           const icon = getIcon(doc.type)
           return (
@@ -78,9 +78,9 @@ export function DocumentsModal() {
               <div className={cn('w-7 h-7 rounded flex items-center justify-center text-[8px] font-bold shrink-0', icon.cls)}>{icon.label}</div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium text-ink truncate">{doc.name}</div>
-                <div className="text-[10px] text-ink-faint">{formatFileSize(doc.size)}</div>
+                <div className="text-[10px] text-ink-muted">{formatFileSize(doc.size)}</div>
               </div>
-              <button onClick={() => removeDocument(doc.id)} className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-faint hover:text-red-600 transition-all">
+              <button onClick={() => removeDocument(doc.id)} className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-muted hover:text-red-600 transition-all">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
               </button>
             </div>
@@ -100,7 +100,7 @@ function TabBtn({ active, onClick, count, color, children }: { active: boolean; 
     <button onClick={onClick} className={cn('flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium rounded-md border whitespace-nowrap transition-colors shrink-0', active ? 'border-sand-700 bg-surface-hover text-ink' : 'border-border text-ink-muted hover:text-ink hover:border-border-strong')}>
       {color && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />}
       {children}
-      {count > 0 && <span className="text-[9px] text-ink-faint ml-0.5">{count}</span>}
+      {count > 0 && <span className="text-[9px] text-ink-muted ml-0.5">{count}</span>}
     </button>
   )
 }

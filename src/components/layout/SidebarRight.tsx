@@ -19,7 +19,6 @@ export function SidebarRight() {
   const kickAgent = useSessionStore((s) => s.kickAgent)
   const inviteAgent = useSessionStore((s) => s.inviteAgent)
   const addMessage = useChatStore((s) => s.addMessage)
-  const setSettings = useSessionStore((s) => s.setSettings)
 
   const roomAgents = session ? agents.filter((a) => session.agentIds.includes(a.id)) : []
   const sessionAgentIds = session?.agentIds || []
@@ -66,7 +65,7 @@ function AgentsTab({ agents, allAgents, sessionAgentIds, sessionId, onKick, onIn
   return (
     <div className="p-3 space-y-2">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">Room Agents</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Room Agents</span>
         <button onClick={onAddAgent} className="text-[11px] text-ink-muted hover:text-ink transition-colors">+ Add</button>
       </div>
       {agents.map((agent) => (
@@ -74,18 +73,18 @@ function AgentsTab({ agents, allAgents, sessionAgentIds, sessionId, onKick, onIn
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0" style={{ backgroundColor: agent.avatarColor }}>{getInitials(agent.name)}</div>
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium text-ink truncate">{agent.name}</div>
-            <div className="text-[11px] text-ink-faint truncate">{agent.roleTitle}</div>
+            <div className="text-[11px] text-ink-muted truncate">{agent.roleTitle}</div>
           </div>
-          <div className="text-[10px] text-ink-faint shrink-0">{agent.model.modelName}</div>
-          <button onClick={() => onKick(agent.id)} className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-faint hover:text-red-600 hover:bg-red-50 transition-all shrink-0" title={'Kick ' + agent.name}>
+          <div className="text-[10px] text-ink-muted shrink-0">{agent.model.modelName}</div>
+          <button onClick={() => onKick(agent.id)} className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-muted hover:text-red-600 hover:bg-red-50 transition-all shrink-0" title={'Kick ' + agent.name}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
           </button>
         </div>
       ))}
-      {agents.length === 0 && <p className="text-xs text-ink-faint text-center py-4">No agents in this room</p>}
+      {agents.length === 0 && <p className="text-xs text-ink-muted text-center py-4">No agents in this room</p>}
       {kickedAgents.length > 0 && (
         <div className="mt-4 pt-3 border-t border-border">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint block mb-2">Not in room</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted block mb-2">Not in room</span>
           {kickedAgents.map((agent) => (
             <div key={agent.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg opacity-50 hover:opacity-80 transition-opacity">
               <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold text-white shrink-0" style={{ backgroundColor: agent.avatarColor }}>{agent.name[0]}</div>
@@ -96,7 +95,7 @@ function AgentsTab({ agents, allAgents, sessionAgentIds, sessionId, onKick, onIn
         </div>
       )}
       <div className="mt-4 pt-3 border-t border-border">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint block mb-2">Controls</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted block mb-2">Controls</span>
         <div className="flex items-center justify-between py-1.5">
           <span className="text-xs text-ink-muted">Moderator</span>
           <button

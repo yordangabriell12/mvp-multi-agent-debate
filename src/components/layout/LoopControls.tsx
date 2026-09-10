@@ -38,7 +38,7 @@ export function LoopControls({ sessionId, loading, loopRound = 0, onStop }: Loop
         </span>
       </div>
 
-      <span className="font-mono text-ink-faint">
+      <span className="font-mono text-ink-muted">
         round {loopRound > 0 ? loopRound : session.currentRound}
       </span>
 

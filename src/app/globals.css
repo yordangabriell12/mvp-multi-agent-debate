@@ -31,7 +31,11 @@
   --color-ink: #1a1816;
   --color-ink-light: #3d3833;
   --color-ink-muted: #6b6560;
-  --color-ink-faint: #9c9590;
+  /* Non-text only: borders, dividers and icon strokes. As text this value
+     reaches about 3.7:1, below the 4.5:1 needed for body copy, so text uses
+     ink-muted instead. Darkened from #9c9590 (2.95:1) so borders and focus
+     indicators clear the 3:1 non-text threshold. */
+  --color-ink-faint: #8a8480;
 
   --color-surface: #ffffff;
   --color-surface-raised: #fafaf9;

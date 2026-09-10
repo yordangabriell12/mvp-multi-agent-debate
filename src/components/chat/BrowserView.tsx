@@ -61,8 +61,8 @@ export function BrowserView({ initialUrl = '' }: BrowserViewProps) {
   useEffect(() => { if (initialUrl) navigate(initialUrl) }, [initialUrl, navigate])
 
   return (
-    <div className="rounded-lg border border-[var(--border)] overflow-hidden my-3 bg-white">
-      <div className="flex items-center gap-2 px-3 py-2 bg-[#f8f9fa] border-b border-[var(--border)]">
+    <div className="rounded-lg border border-[var(--color-border)] overflow-hidden my-3 bg-white">
+      <div className="flex items-center gap-2 px-3 py-2 bg-[#f8f9fa] border-b border-[var(--color-border)]">
         <div className="flex gap-1">
           <button onClick={() => exec('back')} className="p-1 rounded hover:bg-gray-200 text-xs" title="Back">◀</button>
           <button onClick={() => navigate(url)} className="p-1 rounded hover:bg-gray-200 text-xs" title="Refresh">↻</button>

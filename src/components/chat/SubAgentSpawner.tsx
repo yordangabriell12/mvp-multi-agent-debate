@@ -53,8 +53,8 @@ export function SubAgentSpawner({ onResult }: SubAgentSpawnerProps) {
   }
 
   return (
-    <div className="rounded-lg border border-[var(--border)] overflow-hidden my-3">
-      <div className="px-3 py-1.5 bg-[#f8f9fa] border-b border-[var(--border)]">
+    <div className="rounded-lg border border-[var(--color-border)] overflow-hidden my-3">
+      <div className="px-3 py-1.5 bg-[#f8f9fa] border-b border-[var(--color-border)]">
         <span className="text-[10px] font-semibold text-gray-500 uppercase">🤖 Sub-Agent Spawner</span>
       </div>
 

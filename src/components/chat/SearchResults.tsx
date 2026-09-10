@@ -16,8 +16,8 @@ export function SearchResults({ results, query, source }: SearchResultsProps) {
   if (!results.length) return null
 
   return (
-    <div className="rounded-lg border border-[var(--border)] overflow-hidden my-3">
-      <div className="px-3 py-1.5 bg-[#f8f9fa] border-b border-[var(--border)] flex items-center gap-2">
+    <div className="rounded-lg border border-[var(--color-border)] overflow-hidden my-3">
+      <div className="px-3 py-1.5 bg-[#f8f9fa] border-b border-[var(--color-border)] flex items-center gap-2">
         <span className="text-[10px] font-semibold text-gray-500 uppercase">🔍 Search Results</span>
         <span className="text-[10px] text-gray-400">for &quot;{query}&quot;</span>
         {source && <span className="text-[10px] text-gray-400">via {source}</span>}

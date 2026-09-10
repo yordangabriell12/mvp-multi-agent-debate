@@ -24,21 +24,31 @@ export function ApiKeysModal() {
   const [modelName, setModelName] = useState('')
 
   const handleTest = async (providerId: string) => {
+    const prov = providers.find((p) => p.id === providerId)
     setTesting(providerId)
     setTestResults((p) => ({ ...p, [providerId]: null }))
-    const prov = providers.find((p) => p.id === providerId)
+
     if (!prov?.apiKey) {
       setTestResults((p) => ({ ...p, [providerId]: 'fail' }))
       setTesting(null)
       return
     }
+    // Without a model there is nothing to ask for, so the request would fail
+    // for a reason that has nothing to do with the key.
+    const modelName = prov.models[0]?.id
+    if (!modelName) {
+      setTestResults((p) => ({ ...p, [providerId]: 'fail' }))
+      setTesting(null)
+      return
+    }
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [{ role: 'user', content: 'Say OK' }],
-          agent: { id: 'test', name: 'Test', systemPrompt: 'Reply with just OK', provider: prov.id, modelName: prov.models[0]?.id || '' },
+          agent: { id: 'test', name: 'Test', systemPrompt: 'Reply with just OK', provider: prov.id, modelName },
           providers: [prov],
         }),
       })
@@ -78,11 +88,11 @@ export function ApiKeysModal() {
             </svg>
           </div>
           <span className="text-xs font-semibold text-ink">Moderator</span>
-          <span className="text-[10px] text-ink-faint">Dedicated provider for the AI moderator</span>
+          <span className="text-[10px] text-ink-muted">Dedicated provider for the AI moderator</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] text-ink-faint block mb-1">Provider</label>
+            <label className="text-[10px] text-ink-muted block mb-1">Provider</label>
             <select
               value={moderatorProviderId}
               onChange={(e) => {
@@ -99,7 +109,7 @@ export function ApiKeysModal() {
             </select>
           </div>
           <div>
-            <label className="text-[10px] text-ink-faint block mb-1">Model</label>
+            <label className="text-[10px] text-ink-muted block mb-1">Model</label>
             <select
               value={moderatorModelId}
               onChange={(e) => setModeratorProvider(moderatorProviderId, e.target.value)}
@@ -129,12 +139,12 @@ export function ApiKeysModal() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-ink">{provider.name}</div>
-                  <div className="text-[11px] text-ink-faint truncate">{provider.baseUrl}</div>
+                  <div className="text-[11px] text-ink-muted truncate">{provider.baseUrl}</div>
                 </div>
-                <span className={cn('text-[10px] px-1.5 py-0.5 rounded', hasKey ? 'bg-sage-light text-sage' : 'bg-surface-inset text-ink-faint')}>
+                <span className={cn('text-[10px] px-1.5 py-0.5 rounded', hasKey ? 'bg-sage-light text-sage' : 'bg-surface-inset text-ink-muted')}>
                   {provider.models.length} models
                 </span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={cn('text-ink-faint transition-transform', isExpanded && 'rotate-180')}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={cn('text-ink-muted transition-transform', isExpanded && 'rotate-180')}>
                   <path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
@@ -142,34 +152,54 @@ export function ApiKeysModal() {
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-border pt-3 space-y-3">
                   <div>
-                    <label className="text-[11px] text-ink-faint block mb-1">Name</label>
+                    <label className="text-[11px] text-ink-muted block mb-1">Name</label>
                     <input value={provider.name} onChange={(e) => updateProvider(provider.id, { name: e.target.value })} className="w-full px-3 py-1.5 text-sm bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint" />
                   </div>
                   <div>
-                    <label className="text-[11px] text-ink-faint block mb-1">Base URL</label>
+                    <label className="text-[11px] text-ink-muted block mb-1">Base URL</label>
                     <input value={provider.baseUrl} onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })} placeholder="https://api.example.com/v1" className="w-full px-3 py-1.5 text-sm font-mono bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint" />
                   </div>
                   <div>
-                    <label className="text-[11px] text-ink-faint block mb-1">API Key</label>
+                    <label className="text-[11px] text-ink-muted block mb-1">API Key</label>
                     <input type="password" value={provider.apiKey} onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })} placeholder="sk-..." className="w-full px-3 py-1.5 text-sm font-mono bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint" />
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => handleTest(provider.id)}
+                      disabled={!hasKey || provider.models.length === 0 || testing === provider.id}
+                      className="px-3 py-1.5 text-[11px] text-ink-muted border border-border rounded-md hover:text-ink hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-sand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {testing === provider.id ? 'Testing...' : 'Test connection'}
+                    </button>
+                    {testResults[provider.id] === 'ok' && (
+                      <span className="text-[11px] text-sage">Connection OK</span>
+                    )}
+                    {testResults[provider.id] === 'fail' && (
+                      <span className="text-[11px] text-rust">Connection failed</span>
+                    )}
+                    {!hasKey && <span className="text-[11px] text-ink-muted">Add a key first</span>}
+                    {hasKey && provider.models.length === 0 && (
+                      <span className="text-[11px] text-ink-muted">Add a model first</span>
+                    )}
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-ink-faint">Models</label>
+                      <label className="text-[11px] text-ink-muted">Models</label>
                       <button onClick={() => setAddModelTo(addModelTo === provider.id ? null : provider.id)} className="text-[10px] text-ink-muted hover:text-ink transition-colors">+ add model</button>
                     </div>
                     <div className="space-y-1">
                       {provider.models.map((model) => (
                         <div key={model.id} className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-inset rounded-md group">
                           <span className="text-xs text-ink flex-1 truncate">{model.name}</span>
-                          <span className="text-[10px] text-ink-faint font-mono">{model.id}</span>
-                          <button onClick={() => removeModel(provider.id, model.id)} className="opacity-0 group-hover:opacity-100 text-ink-faint hover:text-red-600 transition-all">
+                          <span className="text-[10px] text-ink-muted font-mono">{model.id}</span>
+                          <button onClick={() => removeModel(provider.id, model.id)} className="opacity-0 group-hover:opacity-100 text-ink-muted hover:text-red-600 transition-all">
                             <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 1l6 6M7 1l-6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
                           </button>
                         </div>
                       ))}
-                      {provider.models.length === 0 && <p className="text-[11px] text-ink-faint py-2 text-center">No models added yet</p>}
+                      {provider.models.length === 0 && <p className="text-[11px] text-ink-muted py-2 text-center">No models added yet</p>}
                     </div>
                     {addModelTo === provider.id && (
                       <div className="flex gap-1.5 mt-2">
@@ -196,7 +226,7 @@ export function ApiKeysModal() {
             <input value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="Base URL (e.g. https://my-api.com/v1)" className="w-full px-3 py-1.5 text-sm font-mono bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint" />
             <input type="password" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="API Key (optional, can add later)" className="w-full px-3 py-1.5 text-sm font-mono bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint" />
             <div className="border-t border-border pt-2 mt-2">
-              <div className="text-[11px] text-ink-faint mb-1.5">First model (optional, can add more later)</div>
+              <div className="text-[11px] text-ink-muted mb-1.5">First model (optional, can add more later)</div>
               <div className="flex gap-1.5">
                 <input value={newModelId} onChange={(e) => setNewModelId(e.target.value)} placeholder="model-id" className="flex-1 px-2 py-1.5 text-[11px] font-mono bg-surface-inset border border-border rounded focus:outline-none focus:border-ink-faint" />
                 <input value={newModelName} onChange={(e) => setNewModelName(e.target.value)} placeholder="Display name" className="flex-1 px-2 py-1.5 text-[11px] bg-surface-inset border border-border rounded focus:outline-none focus:border-ink-faint" />

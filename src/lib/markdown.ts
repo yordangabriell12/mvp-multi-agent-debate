@@ -17,7 +17,7 @@ export function renderMarkdown(text: string): string {
     // Numbered lists
     .replace(/^(\d+)\. (.+)$/gm, '<div class="ml-4 mb-1"><span class="text-ink-muted">$1.</span> $2</div>')
     // Bullet lists
-    .replace(/^- (.+)$/gm, '<div class="ml-4 mb-1 before:content-[\"·\"] before:mr-2 before:text-ink-faint">$1</div>')
+    .replace(/^- (.+)$/gm, '<div class="ml-4 mb-1 before:content-[\"·\"] before:mr-2 before:text-ink-muted">$1</div>')
     // Line breaks
     .replace(/\n/g, '<br />')
 

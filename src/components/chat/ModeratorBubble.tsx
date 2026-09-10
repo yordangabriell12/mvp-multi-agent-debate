@@ -17,8 +17,8 @@ export function ModeratorBubble({ content, timestamp }: ModeratorBubbleProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1">
           <span className="text-sm font-medium text-ink">Moderator</span>
-          <span className="text-[11px] uppercase tracking-wide text-ink-faint">Facilitator</span>
-          <span className="text-[10px] text-ink-faint">{formatTime(timestamp)}</span>
+          <span className="text-[11px] uppercase tracking-wide text-ink-muted">Facilitator</span>
+          <span className="text-[10px] text-ink-muted">{formatTime(timestamp)}</span>
         </div>
         <div className="text-sm text-ink leading-relaxed border-l-2 border-ink-faint/40 pl-3" dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }} />
       </div>

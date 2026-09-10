@@ -1,7 +1,7 @@
 export function ConsensusCard() {
   return (
     <div className="border border-border rounded-lg bg-surface-raised p-4 my-4 animate-fade-up">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint mb-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted mb-3">
         Consensus Check
       </div>
       <div className="space-y-2">
@@ -36,8 +36,8 @@ function ConsensusRow({
   return (
     <div className="flex items-center gap-3 text-xs">
       <span className="font-medium w-16 shrink-0" style={{ color }}>{name}</span>
-      <span className="text-ink-faint line-through">{from}</span>
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-ink-faint shrink-0">
+      <span className="text-ink-muted line-through">{from}</span>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-ink-muted shrink-0">
         <path d="M4 6h4M6.5 4l2 2-2 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <span className="text-ink-light">{to}</span>

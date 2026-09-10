@@ -21,8 +21,8 @@ export function ChatBubble({ name, role, color, content, timestamp }: ChatBubble
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1">
           <span className="text-sm font-medium" style={{ color }}>{name}</span>
-          <span className="text-[11px] text-ink-faint">{role}</span>
-          <span className="text-[10px] text-ink-faint">{formatTime(timestamp)}</span>
+          <span className="text-[11px] text-ink-muted">{role}</span>
+          <span className="text-[10px] text-ink-muted">{formatTime(timestamp)}</span>
         </div>
         <div className="text-sm text-ink leading-relaxed" dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }} />
       </div>
