@@ -207,14 +207,30 @@ Lalu di Nginx Proxy Manager, buat proxy host:
 
 ## 10. Backup
 
-VMA menyimpan seluruh data pengguna di **browser**, jadi tidak ada data aplikasi di server yang perlu di-backup. Yang perlu disimpan hanyalah:
+Sejak akun diperkenalkan, **ada** data aplikasi di server yang perlu di-backup:
 
-- File `~/apps/vma/.env` (berisi kredensial dan secret)
+- Volume Docker `vma-data` (berisi `users.json`, `shared.json`, dan
+  `workspace-<id>.json`). Semua terenkripsi, tapi tetap perlu disimpan.
+- File `~/apps/vma/.env`, yang memuat `VMA_SESSION_SECRET` dan `VMA_CONFIG_KEY`.
+  **Tanpa keduanya, isi volume tidak bisa dibaca.** Simpan terpisah dari volume:
+  mencadangkan keduanya di mesin yang sama membuat enkripsinya tidak berguna.
 - Konfigurasi proxy host NPM (sudah tercakup backup Docker harian di `/root/backups/`)
 - Sertifikat Let's Encrypt (juga tercakup backup harian)
 
+```bash
+# Cadangan volume, dijalankan dari host
+docker run --rm -v vma-data:/data -v /root/backups:/out alpine \
+  tar czf /out/vma-data-$(date +%F).tar.gz -C /data .
+```
+
+> [!warning] Jangan simpan .env di server yang sama
+> Volume terenkripsi plus kunci enkripsi di mesin yang sama sama saja dengan tidak
+> dienkripsi kalau server itu hilang. Simpan salinan `.env` di tempat lain.
+
 > [!note] Backup otomatis yang sudah ada
-> Server sudah punya script `/root/backup-docker.sh` yang jalan tiap pukul 03:00 dan menyimpan data NPM serta sertifikat dengan retensi 7 hari.
+> Server sudah punya script `/root/backup-docker.sh` yang jalan tiap pukul 03:00
+> dan menyimpan data NPM serta sertifikat dengan retensi 7 hari. Script itu belum
+> mencakup volume `vma-data`.
 
 ---
 

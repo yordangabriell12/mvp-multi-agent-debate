@@ -46,14 +46,23 @@ src/
 │   ├── page.tsx              # Redirect ke /app
 │   ├── globals.css           # Design token + keyframes
 │   ├── login/page.tsx        # Halaman login
+│   ├── change-password/      # Wajib dilewati akun baru
 │   ├── app/
 │   │   ├── layout.tsx        # Sidebar kiri + main + sidebar kanan
 │   │   ├── page.tsx          # Halaman chat utama
+│   │   ├── admin/users/      # Kelola akun (admin saja)
 │   │   └── rooms/[id]/       # Room per session
 │   └── api/
 │       ├── auth/login/       # Verifikasi kredensial
 │       ├── auth/logout/      # Hapus cookie
+│       ├── auth/set-password/# Ganti password sementara
+│       ├── me/               # Siapa yang login, dan haknya
+│       ├── admin/users/      # Buat, atur ulang, hapus akun
+│       ├── config/           # Sinkronisasi workspace per akun
 │       ├── chat/             # Proxy streaming ke provider AI
+│       ├── improve/          # Perbaiki teks
+│       ├── providers/models/ # Daftar model milik provider
+      │                      # (+ baseUrl/apiKey hanya diizinkan untuk admin)
 │       └── search/           # Pencarian Wikipedia
 │
 ├── components/
@@ -61,13 +70,23 @@ src/
 │   ├── input/                # InputBar (@mention, upload)
 │   ├── layout/               # Sidebar, topbar, loop control
 │   ├── modals/               # 5 modal konfigurasi
+│   ├── onboarding/           # Panduan login pertama
 │   └── sessions/             # Item daftar sesi
 │
 ├── hooks/useChat.ts          # Otak percakapan
-├── lib/                      # auth, rateLimit, netGuard, db, markdown, utils
-├── store/                    # 7 store Zustand
+├── lib/
+│   ├── auth.ts               # Hash password, tanda tangan sesi
+│   ├── users.ts              # Daftar akun dan peran
+│   ├── session.ts            # Identitas pemanggil di route
+│   ├── serverStore.ts        # Provider bersama + workspace per akun
+│   ├── secureFile.ts         # File JSON terenkripsi, tulis atomik
+│   ├── providerResolver.ts   # Ambil kunci untuk panggilan ke provider
+│   ├── netGuard.ts           # Guard SSRF (string + resolusi DNS)
+│   ├── rateLimit.ts          # Pembatas login dan biaya chat
+│   └── ...                   # db, markdown, utils
+├── store/                    # Store Zustand (9)
 ├── types/                    # Kontrak TypeScript
-└── proxy.ts                  # Gate autentikasi (Next 16)
+└── proxy.ts                  # Gate autentikasi dan peran (Next 16)
 ```
 
 > [!note] `middleware.ts` sudah tidak dipakai

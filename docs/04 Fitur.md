@@ -92,8 +92,23 @@ Agent bisa diberi kemampuan mencari. Aktifkan lewat flag pencarian pada agent, l
 > [!note] Hemat permintaan
 > Pencarian dijalankan **sekali per pertanyaan**, bukan sekali per agent. Kalau tidak ada agent yang mengaktifkan pencarian, tidak ada permintaan tambahan sama sekali. Hasilnya diambil dari API Wikipedia dan tidak butuh API key.
 
-### 2.7 Role Lock
-Kalau **Role Lock** dinyalakan, setiap agent diminta tetap berada di dalam peranannya dan menyerahkan pertanyaan di luar keahliannya kepada rekan yang tepat.
+### 2.7 Akun, peran, dan kunci API bersama
+
+Satu login bisa punya banyak akun, dengan dua peran:
+
+- **Super admin** mengelola akun dan memiliki kunci API.
+- **Pengguna** berdebat memakai kunci milik admin, tanpa pernah melihatnya.
+
+Kunci API disimpan di server dan hanya dikirim ke admin. Klien non-admin menerima
+flag `hasKey` saja, sehingga pemilih model tetap bisa menunjukkan provider mana
+yang siap dipakai. Saat berdebat, server sendiri yang menyisipkan kunci ke
+permintaan ke provider.
+
+Kalau sebuah provider belum diisi kunci, daftar modelnya **kosong** dan bukan
+error, supaya tampilannya jujur tanpa perlu dijelaskan.
+
+Panduan singkat muncul otomatis pada login pertama, dan bisa dibuka lagi lewat
+menu **Panduan**.
 
 ### 2.8 Perbaiki teks (Improve)
 Tombol **Improve** menulis ulang teks dengan model yang kamu konfigurasi. Ada di dua tempat:
@@ -139,8 +154,77 @@ Setiap prompt agent menyertakan dua blok aturan yang sama:
 ### 3.1 Knowledge base per agent
 Upload dokumen (PDF, MD, TXT, JSON, CSV, DOC, XLSX) ke tab **General** atau ke tab agent tertentu. Dokumen tersimpan di IndexedDB, jadi tetap ada setelah refresh.
 
-### 3.2 Pencarian Wikipedia
-Endpoint `/api/search` mengambil hasil dari API Wikipedia, menampilkan judul, kutipan, dan tautan. Tidak butuh API key.
+### 3.2 Deep Search: tiap agen mencari sendiri
+
+Toggle **Deep Search** di baris kontrol loop. Saat hidup, **setiap agen menyusun
+querynya sendiri** sesuai perannya sebelum menjawab: Finance Advisor mencari
+angka, Legal Counsel mencari aturan. Bukan satu pencarian yang dibagi rata.
+
+Bisa dinyalakan dan dimatikan kapan saja, bahkan saat agen sedang bekerja.
+Toggle dibaca pada saat agen berjalan, jadi:
+
+- Menyalakan atau mematikan hanya memengaruhi giliran berikutnya.
+- Riset yang sudah terkumpul **tetap ada** di percakapan; mematikannya tidak
+  menghapus apa pun.
+- Menyalakannya lagi akan melengkapi sisanya.
+
+Sumber yang dipakai, dan apa yang perlu diisi:
+
+| Sumber | Butuh kunci | Cocok untuk |
+| --- | --- | --- |
+| Wikipedia | tidak | Latar belakang, definisi, pengetahuan umum |
+| Tavily | `VMA_TAVILY_API_KEY` | Pertanyaan bisnis, teknis |
+| SearXNG | `VMA_SEARXNG_URL` | Sama, tanpa biaya per query |
+
+> [!warning] Batas jujur
+> Wikipedia bukan mesin pencari. Query seperti `"unit economics of SaaS startups"`
+> mengembalikan artikel tentang perusahaan, bukan benchmark. Untuk topik bisnis
+> dan berita, isi salah satu dari Tavily atau SearXNG.
+
+Batasan biaya: maksimum 2 query per agen per giliran, maksimum 8 hasil digabung,
+dan hasilnya tidak disimpan antar kiriman.
+
+### 3.3 Baca PDF dan gambar (OCR)
+
+Unggah PDF atau gambar, dan teks di dalamnya dibaca untuk dipakai agen. Ada dua
+jalur untuk PDF, dan yang dipakai ditentukan per halaman:
+
+| Jenis halaman | Cara dibaca | Biaya |
+| --- | --- | --- |
+| Punya lapisan teks | Diekstrak langsung | Gratis, tanpa panggilan model |
+| Hasil scan (hanya gambar) | Di-render jadi PNG lalu dibaca model vision | Sekali per halaman |
+
+Model pembaca gambar **dipilih super admin** di **Sidebar → Reading Documents**,
+dan dipakai semua akun. Akun biasa bisa mengunggah berkas tapi tidak bisa mengubah
+setelan itu, dan tidak melihat layarnya sama sekali.
+
+Layar itu memuat empat hal:
+
+| Setelan | Arti |
+| --- | --- |
+| **Provider** | Provider yang punya API key. Yang belum punya key tetap terlihat tapi tidak bisa dipilih |
+| **Vision model** | Model yang membaca. Model teks biasa tidak bisa membaca gambar |
+| **Pages read per PDF, at most** | Batas halaman, karena setiap halaman yang dikirim ke model berbiaya |
+| **Read PDFs and images** | Sakelar utama. Selama mati, unggahan ditolak dengan penjelasan |
+
+#### Batas ukuran gambar
+
+Ukuran berkas saja tidak cukup untuk membatasi biaya membaca gambar. PNG, WebP, dan
+GIF memampatkan data, jadi PNG 20000 × 20000 berwarna rata hanya **379 KB di disk**
+tetapi **400 megapiksel** saat dibuka. Karena itu dimensi dibaca langsung dari
+header (PNG, JPEG, GIF, WebP) sebelum berkas diserahkan ke apa pun yang mendekodenya.
+
+- Batas berkas: **12 MB**
+- Batas luas: **40 megapiksel**
+- Gambar yang ukurannya **tidak bisa dibaca ditolak**, bukan dilewatkan, karena
+  gambar yang tidak terukur justru bentuk khas bom dekompresi
+
+> [!note] Sebelum diatur
+> Layar unggah menampilkan "belum diatur" dan bukan error. PDF bertekstur teks
+> tetap bisa dibaca karena tidak butuh model sama sekali.
+
+Halaman yang gagal dibaca disebutkan nomornya, bukan dihilangkan diam-diam, supaya
+kamu tahu isi mana yang belum terbaca.
 
 ---
 
@@ -172,9 +256,23 @@ Endpoint `/api/search` mengambil hasil dari API Wikipedia, menampilkan judul, ku
 | **Keluarkan agent** | Tombol silang saat hover di kartu agent |
 | **Undang kembali** | Tombol "+ invite" di bagian "Not in room" |
 | **Pause / Resume / Stop** | Baris kontrol loop di atas area chat |
-| **Export** | Tombol Export di topbar, hasilnya file Markdown |
+| **Export** | Tombol Export di topbar, hasilnya file Markdown. Hanya ada satu, di topbar |
 | **Token meter** | Perkiraan token dan biaya per sesi |
 | **Sign out** | Tombol di kaki sidebar kiri |
+
+### 5.1 Sidebar kanan bisa disembunyikan
+
+Panel kanan (tab **Agents** dan **Mode**) memakai lebar tetap 288px. Di layar sempit
+lebar itu diambil dari area chat, jadi panelnya bisa disembunyikan:
+
+- Tombol sembunyikan ada di ujung kanan baris tab
+- Saat tersembunyi, tab kecil muncul di tepi kanan layar untuk memunculkannya lagi
+- Bisa dijangkau keyboard (`Tab` lalu `Enter` atau `Space`), dan punya nama untuk
+  pembaca layar
+
+> [!note] Belum tersimpan
+> Keadaan sembunyi/tampil belum disimpan. Memuat ulang halaman mengembalikan panel
+> ke posisi terbuka. Ini sama dengan sidebar kiri.
 
 > [!note] Cara menghitung perkiraan token
 > Kalau metadata token tersedia, dipakai. Kalau tidak, dihitung kasar sekitar 4 karakter per token, lalu biaya diperkirakan dari angka rata-rata per 1.000 token. Ini **perkiraan**, bukan tagihan resmi provider.
@@ -184,13 +282,16 @@ Endpoint `/api/search` mengambil hasil dari API Wikipedia, menampilkan judul, ku
 ## 6. Yang Belum Ada
 
 > [!warning] Jujur soal batasan
-> - Tombol **Share Room** di sidebar kanan dan **Share** di topbar belum punya aksi. Perlu diimplementasikan atau dihapus.
 > - Fitur yang bergantung pada backend Python (`CodeInterpreter`, `BrowserView`, `KnowledgePanel`, `PPTViewer`, `SubAgentSpawner`) belum berfungsi di deployment saat ini karena backend-nya belum ada.
 > - `PPTViewer` sekarang menampilkan slide yang dikirim bersama pesan (`metadata.pptSlides`), tetapi belum ada komponen yang memproduksi data itu.
 > - Empat komponen (`ConsensusCard`, `SubAgentSpawner`, `KnowledgePanel`, `TaskScheduler`) ada di kode namun belum dipanggil dari `ChatArea`.
+> - **Deep Search tanpa Tavily atau SearXNG baru berguna untuk pengetahuan umum.** Wikipedia mengembalikan artikel ensiklopedia, bukan data bisnis. Lihat 3.2.
+> - **OCR belum aktif sampai super admin memilih model vision.** Model teks biasa tidak bisa membaca gambar.
+> - **Headless browser belum ada.** Deep Search melakukan pencarian dan membaca kutipan dari hasilnya, tetapi belum membuka halaman untuk membaca isinya secara penuh.
 
 > [!note] Yang sudah dihapus karena menyesatkan
-> Toggle **Chat / Code / Browse** dan tombol **Attach web page** serta **Attach knowledge** di kotak input sudah dihilangkan. Ketiganya hanya mengubah placeholder atau menampung data yang kemudian dibuang, sehingga terlihat berfungsi padahal tidak. Upload berkas tetap ada karena benar-benar tersimpan.
+> - Toggle **Chat / Code / Browse** dan tombol **Attach web page** serta **Attach knowledge** di kotak input sudah dihilangkan. Ketiganya hanya mengubah placeholder atau menampung data yang kemudian dibuang, sehingga terlihat berfungsi padahal tidak. Upload berkas tetap ada karena benar-benar tersimpan.
+> - Tombol **Share** di topbar, **Share Room** di sidebar kanan, dan **Export** kedua di sidebar kanan sudah dihapus. Ketiganya tidak punya aksi sama sekali. Export transkrip tetap ada, sekarang hanya di satu tempat: topbar.
 
 ### Batas konsumsi
 > [!important] Pengaman biaya di `/api/chat`

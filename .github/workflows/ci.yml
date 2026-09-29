@@ -33,3 +33,77 @@ jobs:
       # lightningcss binary while evaluating the Tailwind PostCSS config.
       - name: Build
         run: npx next build --webpack
+
+      # The flows below are checked against a real server, not only in unit tests,
+      # because what matters is what crosses the wire: whether a key appears in a
+      # response body, whether a role is enforced, whether a new account really
+      # starts empty, and whether a PDF can actually be read by the built output.
+      #
+      # VMA_ALLOW_PRIVATE_BASEURL is on because the OCR flow points the server at a
+      # stand-in provider on loopback. That makes the SSRF guard inactive, so the
+      # two scripts that assert it are told so rather than being left to fail on a
+      # configuration the flag asks for.
+      - name: Start the built server
+        run: |
+          VMA_AUTH_EMAIL=ci@example.com \
+          VMA_AUTH_PASSWORD=ci-password-12345 \
+          VMA_SESSION_SECRET=ci-only-secret-not-used-anywhere-else \
+          VMA_ALLOW_PRIVATE_BASEURL=true \
+          VMA_DATA_DIR="$RUNNER_TEMP/vma-data" \
+          PORT=3999 node .next/standalone/server.js &
+
+          for _ in $(seq 1 30); do
+            if curl -sf -o /dev/null http://127.0.0.1:3999/login; then break; fi
+            sleep 1
+          done
+
+      - name: End-to-end account flow
+        run: BASE=http://127.0.0.1:3999 EXPECT_SSRF_GUARD=false bash scripts/e2e-accounts.sh
+
+      - name: End-to-end authorization
+        run: BASE=http://127.0.0.1:3999 EXPECT_SSRF_GUARD=false bash scripts/e2e-authorization.sh
+
+      # The Deep Search behaviour that was explicitly asked for: the toggle can be
+      # flipped on and off at any time and the session ends in the state last set.
+      # A search reaches the real Wikipedia API, so this also proves the route is
+      # not merely wired up but working.
+      - name: End-to-end deep search
+        run: BASE=http://127.0.0.1:3999 bash scripts/e2e-deep-search.sh
+
+      # The OCR flow needs a vision provider, and a real one would mean a key and
+      # a bill. The stand-in reports what it received, which is what makes an
+      # otherwise invisible fault visible: that a scanned page really was
+      # rendered to an image and sent, rather than quietly skipped.
+      - name: End-to-end OCR flow
+        run: |
+          node scripts/mock-vision-provider.mjs 4599 &
+          for _ in $(seq 1 20); do
+            if curl -sf -o /dev/null http://127.0.0.1:4599/v1/models; then break; fi
+            sleep 1
+          done
+          BASE=http://127.0.0.1:3999 bash scripts/e2e-ocr.sh
+
+      # The route audit reaches every API route and every page, and checks that a
+      # route nobody can call or that answers 500 is caught automatically. It runs
+      # last because it creates and modifies accounts.
+      - name: End-to-end route audit
+        run: BASE=http://127.0.0.1:3999 bash scripts/e2e-route-audit.sh
+
+      # A second server, without the private-URL flag, so the SSRF guard is checked
+      # in the configuration it is meant for. Without this the guard would only
+      # ever be exercised with the flag on, which is the setting that disables it.
+      - name: End-to-end SSRF guard
+        run: |
+          VMA_AUTH_EMAIL=ci@example.com \
+          VMA_AUTH_PASSWORD=ci-password-12345 \
+          VMA_SESSION_SECRET=ci-only-secret-not-used-anywhere-else \
+          VMA_DATA_DIR="$RUNNER_TEMP/vma-data-guard" \
+          PORT=3998 node .next/standalone/server.js &
+
+          for _ in $(seq 1 30); do
+            if curl -sf -o /dev/null http://127.0.0.1:3998/login; then break; fi
+            sleep 1
+          done
+
+          BASE=http://127.0.0.1:3998 EXPECT_SSRF_GUARD=true bash scripts/e2e-accounts.sh
+          BASE=http://127.0.0.1:3998 EXPECT_SSRF_GUARD=true bash scripts/e2e-authorization.sh

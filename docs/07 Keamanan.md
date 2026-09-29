@@ -221,5 +221,79 @@ pbkdf2:<iterasi>:<salt-base64url>:<hash-base64url>
 
 ---
 
-Terkait: [[06 Deployment]] · [[08 Troubleshooting]]
+## 9. Akun, Peran, dan Penyimpanan Kunci
+
+### Siapa Boleh Apa
+
+| Tindakan | Admin | User |
+|---|---|---|
+| Login, berdebat, atur agen sendiri | ya | ya |
+| Melihat dan mengubah kunci API | ya | **tidak** |
+| Membuat, mengganti password, menghapus akun | ya | tidak |
+| Membaca workspace akun lain | tidak | tidak |
+
+Pembatasannya ada di dua lapis: `src/proxy.ts` menolak rute berdasarkan peran yang
+tertulis di cookie bertanda tangan, lalu setiap route handler memeriksa ulang
+perannya ke penyimpanan. Lapis kedua itu yang jadi acuan, bukan yang pertama.
+
+### Kunci API Tidak Pernah Sampai ke Browser
+
+> [!success] Aturan
+> Browser hanya boleh mengirim **id provider**. Kunci dan base URL dibaca server
+> dari penyimpanannya sendiri, lewat `resolveProvider()` di
+> `src/lib/providerResolver.ts`.
+
+Yang sampai ke klien hanyalah `hasKey` (benar/salah). Ini bukan rahasia: fungsinya
+supaya pemilih model bisa menampilkan provider mana yang siap dipakai.
+
+Kalau ada route baru yang memanggil provider, **jangan** menerima `providers[]`
+dari request. Ambil `getCurrentUser()` lalu panggil `resolveProvider()`.
+
+### Penyimpanan Terenkripsi
+
+| File | Isi | Siapa yang baca |
+|---|---|---|
+| `users.json` | akun dan hash password | server saja |
+| `shared.json` | daftar provider, **termasuk kunci** | server saja |
+| `workspace-<id>.json` | agen, sesi, pesan milik satu akun | akun itu saja |
+
+Semua dienkripsi AES-256-GCM dengan kunci turunan dari `VMA_CONFIG_KEY`
+(fallback ke `VMA_SESSION_SECRET`), ditulis ke file sementara lalu di-`rename`,
+dan bermode `600` di dalam direktori `700`. Menyalin file-nya saja tidak cukup
+untuk membacanya.
+
+> [!warning] Mengganti Kunci Enkripsi
+> Mengganti `VMA_CONFIG_KEY` membuat semua file lama tidak bisa dibaca. Pesan
+> errornya akan muncul sebagai `warning` di `/api/config`, bukan kegagalan senyap.
+> Cadangkan `data/` sebelum menggantinya.
+
+### Password
+
+- PBKDF2-SHA256, 210.000 iterasi, garam 16 byte acak per akun.
+- Format hash memakai pemisah `:` (`pbkdf2:iterasi:garam:hash`), **bukan `$`**,
+  sebab Docker Compose menganggap `$` sebagai interpolasi variabel dan diam-diam
+  mengosongkan nilainya.
+- Password yang dibuat admin selalu berstatus sementara: pemiliknya wajib
+  menggantinya, dan selama belum diganti semua rute lain tertutup.
+- Percobaan login dibatasi per IP, ditambah pembatas global sebagai jaring kedua
+  kalau `X-Forwarded-For` dipalsukan.
+
+### SSRF
+
+Dua lapis, karena satu lapis tidak cukup:
+
+1. `checkOutboundUrl` memeriksa string URL. Menangkap `http://127.0.0.1` dan
+   `http://localhost`.
+2. `assertPublicHost` **meresolusi DNS lebih dulu**, lalu menilai alamat hasilnya.
+
+Lapis kedua itu yang penting di Docker: `http://portainer:9000` adalah hostname
+biasa sebagai string, tetapi di dalam jaringan container ia mengarah ke alamat
+privat. Nama yang tidak bisa diresolusi ditolak, bukan dibiarkan dicoba.
+
+`VMA_ALLOW_PRIVATE_BASEURL=true` melewati keduanya. Itu hanya untuk provider yang
+memang berada di jaringan privat, misalnya Ollama yang di-self-host.
+
+---
+
+Terkait: [[06 Deployment]] · [[08 Troubleshooting]] · [[09 Changelog]]
 

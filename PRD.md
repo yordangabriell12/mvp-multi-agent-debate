@@ -695,7 +695,6 @@ SessionSettings:
   loopSpeed        : 'slow' | 'normal' | 'fast'
   maxRounds        : number | 'unlimited'
   moderatorEnabled : boolean
-  roleLock         : boolean
 ```
 
 ### 17.5 Message

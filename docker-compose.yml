@@ -19,6 +19,15 @@ services:
       - VMA_ALLOW_PRIVATE_BASEURL=${VMA_ALLOW_PRIVATE_BASEURL:-false}
       # Where the synced workspace config (providers with API keys) is stored.
       - VMA_DATA_DIR=/app/data
+      # Encrypts the stored configuration and the user list. Falls back to
+      # VMA_SESSION_SECRET so a deployment that predates this keeps working, but
+      # setting it separately is better: the session secret is also the cookie
+      # signing key, and rotating it should not require re-encrypting the store.
+      - VMA_CONFIG_KEY=${VMA_CONFIG_KEY:-}
+      # Deep Search. Wikipedia needs no key; a search provider is optional but is
+      # what makes business and technical questions work.
+      - VMA_TAVILY_API_KEY=${VMA_TAVILY_API_KEY:-}
+      - VMA_SEARXNG_URL=${VMA_SEARXNG_URL:-}
     volumes:
       # Persists providers, agents and sessions across restarts and across the
       # devices you sign in from. Named volume so it survives image rebuilds.

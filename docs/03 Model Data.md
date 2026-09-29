@@ -128,9 +128,8 @@ interface Session {
 | Field | Nilai | Default |
 | --- | --- | --- |
 | `loopSpeed` | `slow` / `normal` / `fast` | `normal` |
-| `maxRounds` | angka / `unlimited` | `unlimited` |
+| `maxRounds` | angka / `unlimited` | `1` |
 | `moderatorEnabled` | boolean | `false` |
-| `roleLock` | boolean | `false` |
 
 ---
 

@@ -525,7 +525,6 @@ Container: `text-center py-2`. Chip: `text-xs text-ink-faint bg-surface-inset px
 │ ───────────────────────────  │
 │ CONTROLS                     │
 │ Moderator             [ ═ ] │   (toggle)
-│ Role Lock             [ ═ ] │
 └──────────────────────────────┘
 ```
 
