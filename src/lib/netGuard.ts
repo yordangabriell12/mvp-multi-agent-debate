@@ -1,9 +1,23 @@
-// Guards against Server-Side Request Forgery in `/api/chat`.
+// Guards against Server-Side Request Forgery on every outbound call the server
+// makes on a user's behalf.
 //
-// That endpoint takes `providers[].baseUrl` straight from the request body and
-// fetches it server-side, so without a check an authenticated user could point
-// it at loopback or private addresses (the NPM admin API on 127.0.0.1:81,
-// Portainer on 9000, cloud metadata on 169.254.169.254, and so on).
+// The base URL used to arrive in the request body, so without a check an
+// authenticated user could point it at loopback or private addresses (the NPM
+// admin API on 127.0.0.1:81, Portainer on 9000, cloud metadata on
+// 169.254.169.254). It is now stored server-side, but a stored value is still
+// editable, so the same checks run before every fetch.
+//
+// Two layers, because either alone is insufficient:
+//
+//   1. `checkOutboundUrl` inspects the URL itself. Fast, synchronous, and it
+//      catches literal `http://127.0.0.1` and `http://localhost`.
+//   2. `assertPublicHost` resolves the hostname and inspects the addresses it
+//      resolves to. This is the one that matters for Docker: `http://portainer:9000`
+//      is not a private address as a string, but it resolves to one inside the
+//      container network. A string check cannot see that.
+
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 
 const BLOCKED_HOSTNAMES = new Set([
   'localhost',
@@ -93,4 +107,75 @@ export function checkOutboundUrl(rawUrl: string): UrlCheck {
   }
 
   return { ok: true }
+}
+
+/**
+ * Resolves a hostname and rejects it if it points anywhere private.
+ *
+ * This is the check `checkOutboundUrl` cannot make. Inside a Docker container,
+ * `portainer`, `npm`, or any other service name on a shared network resolves to a
+ * private address, but as a string it is a perfectly ordinary hostname. Only
+ * after a DNS lookup does the target reveal itself, so the resolved addresses are
+ * what must be judged.
+ *
+ * Every address the name resolves to is checked, not just the first: a name with
+ * both a public and a private record would otherwise be usable to reach the
+ * private one on a retry.
+ */
+export async function assertPublicHost(rawUrl: string): Promise<UrlCheck> {
+  let url: URL
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    return { ok: false, reason: 'Base URL is not a valid URL' }
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+
+  // A literal address needs no lookup: it already says where it goes.
+  if (isIP(host)) {
+    return isPrivateIpv4(host) || isPrivateIpv6(host)
+      ? { ok: false, reason: 'Base URL points at a private or loopback address' }
+      : { ok: true }
+  }
+
+  let addresses: { address: string }[]
+  try {
+    addresses = await lookup(host, { all: true })
+  } catch {
+    return { ok: false, reason: `Base URL host cannot be resolved: ${host}` }
+  }
+
+  if (addresses.length === 0) {
+    return { ok: false, reason: `Base URL host cannot be resolved: ${host}` }
+  }
+
+  for (const { address } of addresses) {
+    const normalised = address.toLowerCase()
+    if (isPrivateIpv4(normalised) || isPrivateIpv6(normalised)) {
+      return {
+        ok: false,
+        reason:
+          `Base URL resolves to a private address (${normalised}). ` +
+          'Set VMA_ALLOW_PRIVATE_BASEURL=true only if the provider really is on a private network.',
+      }
+    }
+  }
+
+  return { ok: true }
+}
+
+/**
+ * Both checks, in order, for callers that just want a yes or no.
+ *
+ * The environment flag bypasses both, which is what a self-hosted Ollama on the
+ * same network needs. It is off unless someone deliberately sets it.
+ */
+export async function checkOutboundUrlDeep(rawUrl: string): Promise<UrlCheck> {
+  if (process.env.VMA_ALLOW_PRIVATE_BASEURL === 'true') return { ok: true }
+
+  const shallow = checkOutboundUrl(rawUrl)
+  if (!shallow.ok) return shallow
+
+  return assertPublicHost(rawUrl)
 }
