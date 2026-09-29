@@ -6,6 +6,7 @@ import { useModalStore } from '@/store/modalStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { AGENT_COLORS, type AgentTone } from '@/types/agent'
+import { providerHasKey } from '@/types/provider'
 import { cn, getInitials } from '@/lib/utils'
 import { ImproveButton } from '@/components/common/ImproveButton'
 
@@ -15,14 +16,14 @@ export function AgentsModal() {
   const { agents, addAgent, updateAgent, removeAgent } = useAgentStore()
   const providers = useSettingsStore((s) => s.providers)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', role: '', tone: 'debate' as AgentTone, color: AGENT_COLORS[0], prompt: '', temperature: '' })
+  const [form, setForm] = useState({ name: '', role: '', tone: 'debate' as AgentTone, color: AGENT_COLORS[0], prompt: '', temperature: '', webSearch: false })
 
-  const reset = () => { setEditId(null); setForm({ name: '', role: '', tone: 'debate', color: AGENT_COLORS[0], prompt: '', temperature: '' }) }
-  const handleEdit = (a: typeof agents[0]) => { setEditId(a.id); setForm({ name: a.name, role: a.roleTitle, tone: a.tone, color: a.avatarColor, prompt: a.systemPrompt, temperature: a.model.temperature === undefined ? '' : String(a.model.temperature) }) }
+  const reset = () => { setEditId(null); setForm({ name: '', role: '', tone: 'debate', color: AGENT_COLORS[0], prompt: '', temperature: '', webSearch: false }) }
+  const handleEdit = (a: typeof agents[0]) => { setEditId(a.id); setForm({ name: a.name, role: a.roleTitle, tone: a.tone, color: a.avatarColor, prompt: a.systemPrompt, temperature: a.model.temperature === undefined ? '' : String(a.model.temperature), webSearch: a.webSearch === true }) }
   const handleSave = () => {
     if (!form.name.trim()) return
-    // Auto-pick first available provider + model
-    const firstProvider = providers.find((p) => p.apiKey) || providers[0]
+    // Auto-pick first provider + model
+    const firstProvider = providers.find(providerHasKey) || providers[0]
     const firstModel = firstProvider?.models[0]
     const parsedTemperature = Number.parseFloat(form.temperature)
     const temperature = Number.isFinite(parsedTemperature)
@@ -41,7 +42,7 @@ export function AgentsModal() {
       },
       persona: { personality: '', communicationStyle: '', values: [], biases: '', agreeableness: 0.5, confidence: 0.7, depth: 0.7, steelmansOthers: true, admitsUncertainty: true, usesRealExamples: true, challengesAssumptions: false },
       skills: [],
-      webSearch: false,
+      webSearch: form.webSearch,
       memory: [],
     }
     if (editId) updateAgent(editId, data); else addAgent(data)
@@ -68,7 +69,33 @@ export function AgentsModal() {
           <div><label className="text-[11px] text-ink-muted block mb-1">Role</label><input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full px-3 py-2 text-sm bg-surface-inset border border-border rounded-md focus:outline-none focus:border-ink-faint" /></div>
         </div>
         <div><label className="text-[11px] text-ink-muted block mb-1">Tone</label>
-          <div className="flex gap-1">{(['debate', 'supportive', 'expert'] as const).map((t) => (<button key={t} onClick={() => setForm({ ...form, tone: t })} className={cn('px-3 py-1.5 text-xs rounded-md border capitalize', form.tone === t ? 'border-sand-700 bg-surface-hover text-ink' : 'border-border text-ink-muted')}>{t}</button>))}</div>
+          <div className="flex gap-1">{(['debate', 'supportive', 'expert'] as const).map((t) => (<button key={t} type="button" onClick={() => setForm({ ...form, tone: t })} className={cn('px-3 py-1.5 text-xs rounded-md border capitalize', form.tone === t ? 'border-sand-700 bg-surface-hover text-ink' : 'border-border text-ink-muted')}>{t}</button>))}</div>
+        </div>
+        {/* Per-agent web search. Only does anything while the session's Deep
+            Search is on, and Deep Search covers the richer case: an agent
+            looking up its own angle rather than sharing one result set. Kept
+            because an agent that previously had it on keeps the shared results,
+            and because a session with Deep Search off should not silently lose
+            the setting. */}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <label htmlFor="agent-web-search" className="text-[11px] text-ink-muted block">
+              Web search
+            </label>
+            <p className="text-[10px] text-ink-muted mt-0.5">
+              Uses the shared result set. Works only while Deep Search is on.
+            </p>
+          </div>
+          <button
+            id="agent-web-search"
+            type="button"
+            role="switch"
+            aria-checked={form.webSearch}
+            onClick={() => setForm({ ...form, webSearch: !form.webSearch })}
+            className={cn('w-8 h-[18px] rounded-full transition-colors relative shrink-0', form.webSearch ? 'bg-sand-700' : 'bg-sand-300')}
+          >
+            <span className={cn('absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform shadow-sm', form.webSearch ? 'left-[14px]' : 'left-[2px]')} />
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

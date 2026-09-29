@@ -45,9 +45,9 @@ export function Topbar({ title, meta }: TopbarProps) {
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button className="px-2.5 py-1 text-xs text-ink-muted hover:text-ink hover:bg-surface-hover rounded-md transition-colors">
-          Share
-        </button>
+        {/* Export lives here only. The sidebar used to carry a second Export
+            button that did nothing, which made the working one look broken the
+            first time someone clicked the wrong of the two. */}
         <button onClick={handleExport} className="px-2.5 py-1 text-xs text-ink-muted hover:text-ink hover:bg-surface-hover rounded-md transition-colors">
           Export
         </button>

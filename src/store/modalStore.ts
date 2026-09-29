@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type ModalId = 'apiKeys' | 'agents' | 'models' | 'roles' | 'documents' | 'newSession' | null
+export type ModalId = 'apiKeys' | 'agents' | 'models' | 'roles' | 'documents' | 'ocr' | 'newSession' | null
 
 interface ModalState {
   activeModal: ModalId

@@ -23,6 +23,7 @@ export function InputBar({ sessionId, onSend, loading, onStop }: InputBarProps) 
   const [mentionIdx, setMentionIdx] = useState(0)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; size: number }[]>([])
+  const [uploadError, setUploadError] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
   const mRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -98,47 +99,73 @@ export function InputBar({ sessionId, onSend, loading, onStop }: InputBarProps) 
               onInput={handleInput}
             />
             <div className="flex items-center gap-1 pr-2 pb-2.5">
-              <button type="button" onClick={() => setShowUpload(!showUpload)} className={cn('w-8 h-8 flex items-center justify-center rounded-lg transition-colors', showUpload ? 'text-ink bg-surface-hover' : 'text-ink-muted hover:text-ink-muted hover:bg-surface-hover')}>
+              <button type="button" onClick={() => setShowUpload(!showUpload)} aria-label={showUpload ? 'Close the file upload panel' : 'Attach files'} title={showUpload ? 'Close the file upload panel' : 'Attach files'} className={cn('w-8 h-8 flex items-center justify-center rounded-lg transition-colors', showUpload ? 'text-ink bg-surface-hover' : 'text-ink-muted hover:text-ink-muted hover:bg-surface-hover')}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 10v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2M8 2v8M5 5l3-3 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
               {loading ? (
-                <button type="button" onClick={onStop} className="w-8 h-8 rounded-lg bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors">
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="1" y="1" width="8" height="8" rx="1" fill="currentColor" /></svg>
+                <button type="button" onClick={onStop} aria-label="Stop" title="Stop" className="w-8 h-8 rounded-lg bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><rect x="1" y="1" width="8" height="8" rx="1" fill="currentColor" /></svg>
                 </button>
               ) : (
-                <button type="submit" className="w-8 h-8 rounded-lg bg-sand-800 text-white flex items-center justify-center hover:bg-ink transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.5 1.5L6 8M12.5 1.5l-4 11-2-5-5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <button type="submit" aria-label="Send" title="Send" className="w-8 h-8 rounded-lg bg-sand-800 text-white flex items-center justify-center hover:bg-ink transition-colors">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M12.5 1.5L6 8M12.5 1.5l-4 11-2-5-5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
               )}
             </div>
           </div>
           {showUpload && (
-            <div className="mx-3 mb-3 border-2 border-dashed border-border-strong rounded-lg p-4 text-center cursor-pointer hover:border-ink-faint transition-colors"
+            /* The drop zone is the control a person actually presses, and it holds
+               the hidden file input. It carries role/tabIndex and a key handler
+               because a div with only onClick is reachable by mouse and by nothing
+               else: someone using a keyboard could open the panel and then have no
+               way to choose a file. The aria-label is also what names it for a
+               screen reader, since the visible text lives in child paragraphs. */
+            <div className="mx-3 mb-3 border-2 border-dashed border-border-strong rounded-lg p-4 text-center cursor-pointer hover:border-ink-faint transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint"
+              role="button"
+              tabIndex={0}
+              aria-label="Drop files here, or choose files to upload"
               onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  // Space would otherwise scroll the conversation.
+                  e.preventDefault()
+                  fileInputRef.current?.click()
+                }
+              }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault()
                 const files = e.dataTransfer.files
+                setUploadError('')
                 for (let i = 0; i < files.length; i++) {
                   const doc = await uploadFile(files[i])
                   if (doc) setUploadedFiles((p) => [...p, { name: doc.name, size: doc.size }])
+                  else setUploadError(useDocumentStore.getState().lastError || 'That file could not be read.')
                 }
               }}
             >
-              <input ref={fileInputRef} type="file" multiple accept=".pdf,.md,.txt,.json,.csv,.doc,.docx,.xlsx" onChange={async (e) => {
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.md,.markdown,.txt,.json,.csv,.tsv,.log,.yaml,.yml,.xml,.html,.htm,.sql,.png,.jpg,.jpeg,.gif,.webp" onChange={async (e) => {
                 const files = e.target.files; if (!files) return
+                setUploadError('')
                 for (let i = 0; i < files.length; i++) {
                   const doc = await uploadFile(files[i])
                   if (doc) setUploadedFiles((p) => [...p, { name: doc.name, size: doc.size }])
+                  else setUploadError(useDocumentStore.getState().lastError || 'That file could not be read.')
                 }
-              }} className="hidden" />
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="mx-auto mb-1.5 text-ink-muted"><path d="M13 11v2.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5V11M9 2v7M6 4.5L9 1.5l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              }} className="hidden" aria-label="Choose files to upload" />
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="mx-auto mb-1.5 text-ink-muted" aria-hidden="true"><path d="M13 11v2.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5V11M9 2v7M6 4.5L9 1.5l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               <p className="text-xs text-ink-muted">Drop files here or click to browse</p>
-              <p className="text-[10px] text-ink-muted mt-0.5">PDF, MD, TXT, JSON, CSV</p>
+              <p className="text-[10px] text-ink-muted mt-0.5">PDF, images, MD, TXT, JSON, CSV</p>
               {uploadedFiles.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1 justify-center">
                   {uploadedFiles.map((f, i) => (<span key={i} className="text-[10px] bg-surface-inset px-2 py-0.5 rounded-full text-ink-muted">{f.name}</span>))}
                 </div>
+              )}
+              {/* The failure is shown here rather than silently dropping the file.
+                  A PDF with no vision model configured is the common case, and it
+                  needs an explanation, not an unchanged screen. */}
+              {uploadError && (
+                <p role="alert" className="mt-2 text-[10px] text-red-700">{uploadError}</p>
               )}
             </div>
           )}

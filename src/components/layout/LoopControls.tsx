@@ -12,11 +12,13 @@ interface LoopControlsProps {
 
 export function LoopControls({ sessionId, loading, loopRound = 0, onStop }: LoopControlsProps) {
   const session = useSessionStore((s) => s.sessions.find((sess) => sess.id === sessionId))
+  const setSettings = useSessionStore((s) => s.setSettings)
 
-  if (!session || (session.currentRound === 0 && !loading)) return null
+  if (!session) return null
 
   const isRunning = session.status === 'running' || loading
   const isPaused = session.status === 'paused'
+  const deepSearch = session.settings.deepSearch === true
 
   return (
     <div className="h-9 min-h-[36px] px-5 flex items-center gap-3 text-[11px] border-b border-border">
@@ -27,12 +29,8 @@ export function LoopControls({ sessionId, loading, loopRound = 0, onStop }: Loop
             <span className="relative inline-flex rounded-full h-2 w-2 bg-sage" />
           </span>
         )}
-        {isPaused && (
-          <span className="w-2 h-2 rounded-full bg-rust" />
-        )}
-        {!isRunning && !isPaused && (
-          <span className="w-2 h-2 rounded-full bg-sand-400" />
-        )}
+        {isPaused && <span className="w-2 h-2 rounded-full bg-rust" />}
+        {!isRunning && !isPaused && <span className="w-2 h-2 rounded-full bg-sand-400" />}
         <span className="text-ink-muted">
           {isRunning ? 'Loop running' : isPaused ? 'Paused' : 'Idle'}
         </span>
@@ -42,12 +40,40 @@ export function LoopControls({ sessionId, loading, loopRound = 0, onStop }: Loop
         round {loopRound > 0 ? loopRound : session.currentRound}
       </span>
 
+      {/* Read from the session and written straight back, so flipping it mid-run
+          only affects the turns that come after. The switch is never disabled by
+          a run in progress: being able to change your mind while agents are
+          working is the point. */}
+      <button
+        type="button"
+        onClick={() => setSettings(session.id, { deepSearch: !deepSearch })}
+        aria-pressed={deepSearch}
+        title="Setiap agen mencari sendiri di web sebelum menjawab"
+        className={cn(
+          'flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors',
+          deepSearch
+            ? 'border-sage/50 bg-sage-light text-sage'
+            : 'border-border text-ink-muted hover:text-ink hover:bg-surface-hover'
+        )}
+      >
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <circle cx="5.2" cy="5.2" r="3.4" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M7.8 7.8L10.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+        Deep Search {deepSearch ? 'on' : 'off'}
+      </button>
+
       <div className="ml-auto flex items-center gap-1">
         <button
-          onClick={() => {
-            updateSessionStatus(session.id, session.status === 'paused' ? 'running' : 'paused')
-          }}
-          className={cn('px-2 py-0.5 rounded text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors', isPaused && 'text-sage')}
+          onClick={() =>
+            useSessionStore
+              .getState()
+              .updateSession(session.id, { status: isPaused ? 'running' : 'paused' })
+          }
+          className={cn(
+            'px-2 py-0.5 rounded text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors',
+            isPaused && 'text-sage'
+          )}
         >
           {isPaused ? 'Resume' : 'Pause'}
         </button>
@@ -60,8 +86,4 @@ export function LoopControls({ sessionId, loading, loopRound = 0, onStop }: Loop
       </div>
     </div>
   )
-}
-
-function updateSessionStatus(id: string, status: 'running' | 'paused') {
-  useSessionStore.getState().updateSession(id, { status })
 }

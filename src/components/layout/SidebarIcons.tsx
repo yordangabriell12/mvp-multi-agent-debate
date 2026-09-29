@@ -76,3 +76,36 @@ export function DocIcon() {
     </svg>
   )
 }
+
+/** A page with a magnifier over it: reading a document, as opposed to storing one. */
+export function ScanIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2.5 4.5V3A1.5 1.5 0 0 1 4 1.5h1.5M9.5 1.5H11A1.5 1.5 0 0 1 12.5 3v1.5M12.5 9.5V11a1.5 1.5 0 0 1-1.5 1.5H9.5M4.5 12.5H3A1.5 1.5 0 0 1 1.5 11V9.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 5.5h4M5 7.5h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+      <circle cx="9.3" cy="8.6" r="1.9" stroke="currentColor" strokeWidth="1.1" />
+      <path d="M10.7 10l1.5 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** A shield: account and access management, as opposed to an individual person. */
+export function ShieldIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 1.5l4.5 1.8v3.9c0 2.6-1.8 4.6-4.5 5.3-2.7-.7-4.5-2.7-4.5-5.3V3.3L7 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M5 7l1.5 1.5L9.5 5.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** A question mark in a circle: the walkthrough, as distinct from documentation. */
+export function HelpIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5.6 5.5a1.5 1.5 0 0 1 2.9.5c0 1-1.5 1.2-1.5 2.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7" cy="10.2" r="0.7" fill="currentColor" />
+    </svg>
+  )
+}

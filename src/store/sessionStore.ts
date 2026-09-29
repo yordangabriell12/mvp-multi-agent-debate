@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { type Session, type PresetMode, type ResponseMode, type SessionSettings } from '@/types/session'
+import { type Session, type PresetMode, type ResponseMode, type SessionSettings, isPresetMode } from '@/types/session'
 import { DEFAULT_AGENTS } from '@/types/agent'
 import { useChatStore } from '@/store/chatStore'
 import { migrateRoundSetting } from '@/lib/debate'
@@ -29,7 +29,43 @@ const DEFAULT_SETTINGS: SessionSettings = {
   // agent in the room and multiplies both cost and waiting time.
   maxRounds: 1,
   moderatorEnabled: false,
-  roleLock: false,
+  // Off unless asked for. Every turn with it on costs extra search calls plus the
+  // follow-up summaries, so it should never be the default.
+  deepSearch: false,
+  deepSearchMaxQueries: 2,
+}
+
+/** Reads stored sessions and repairs anything an older build left behind. */
+export function normaliseStoredSessions(raw: string | null): Session[] {
+  if (!raw) return []
+  try {
+    const stored = JSON.parse(raw) as Session[]
+    if (!Array.isArray(stored)) return []
+
+    return stored.map((session) => ({
+      ...session,
+      // A session stored before the presets were renamed still holds an old key,
+      // and one stored before the field existed holds nothing at all. Either way
+      // no preset card would show as active, so the screen would look like the
+      // choice had not been made when it had. Settled here, once, for every reader.
+      presetMode: isPresetMode(session.presetMode) ? session.presetMode : 'boardroom',
+      settings: {
+        // Defaults first: a session saved before a setting existed has no value
+        // for it, and a missing `loopSpeed` would render as the word "undefined"
+        // in the Speed control rather than as a speed.
+        ...DEFAULT_SETTINGS,
+        ...session.settings,
+        maxRounds: migrateRoundSetting(session.settings?.maxRounds as number | 'unlimited'),
+        // A session stored before deep search existed has no value for it, and
+        // `undefined` would behave as off everywhere except where it is tested
+        // for `=== false`, so it is settled here.
+        deepSearch: session.settings?.deepSearch === true,
+        deepSearchMaxQueries: session.settings?.deepSearchMaxQueries ?? DEFAULT_SETTINGS.deepSearchMaxQueries,
+      },
+    }))
+  } catch {
+    return []
+  }
 }
 
 function loadSessions(): { sessions: Session[]; activeSessionId: string | null } {
@@ -38,18 +74,13 @@ function loadSessions(): { sessions: Session[]; activeSessionId: string | null }
     const raw = localStorage.getItem(STORAGE_KEYS.sessions)
     const rawId = localStorage.getItem(STORAGE_KEYS.activeSession)
     if (raw) {
-      const stored = JSON.parse(raw) as Session[]
       // Repair round settings left over from when "unlimited" was the default.
       // Without this an existing session would still run the long loop, so the
       // fix would not apply to anyone who already had a session.
-      const sessions = stored.map((session) => ({
-        ...session,
-        settings: {
-          ...session.settings,
-          maxRounds: migrateRoundSetting(session.settings?.maxRounds as number | 'unlimited'),
-        },
-      }))
-      return { sessions, activeSessionId: rawId || (sessions[0]?.id ?? null) }
+      const sessions = normaliseStoredSessions(raw)
+      if (sessions.length > 0) {
+        return { sessions, activeSessionId: rawId || (sessions[0]?.id ?? null) }
+      }
     }
   } catch { /* ignore */ }
   return { sessions: [], activeSessionId: null }

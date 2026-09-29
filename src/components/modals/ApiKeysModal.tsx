@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Modal } from './Modal'
 import { useModalStore } from '@/store/modalStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { providerHasKey } from '@/types/provider'
 import { cn } from '@/lib/utils'
 
 /** Outcome of a connection test, kept so the reason can be shown, not hidden. */
@@ -35,11 +36,9 @@ export function ApiKeysModal() {
     setTesting(providerId)
     setTestResults((p) => ({ ...p, [providerId]: undefined }))
 
-    if (!prov?.apiKey) {
-      setTestResults((p) => ({ ...p, [providerId]: { ok: false, detail: 'Add an API key first.' } }))
-      setTesting(null)
-      return
-    }
+    // A provider with only an unsaved key is still testable, because the server
+    // checks the stored key for the id. What matters here is that one exists.
+    if (!prov) return
     // Without a model there is nothing to ask for, so the request would fail
     // for a reason that has nothing to do with the key.
     const modelName = prov.models[0]?.id
@@ -64,7 +63,6 @@ export function ApiKeysModal() {
             provider: prov.id,
             modelName,
           },
-          providers: [prov],
         }),
       })
 
@@ -109,7 +107,14 @@ export function ApiKeysModal() {
       const res = await fetch('/api/providers/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseUrl: prov.baseUrl, apiKey: prov.apiKey, id: prov.id }),
+        // The key is left out when it is empty, so an admin editing providers
+        // does not send an empty string that would have to be told apart from
+        // "leave the stored key alone".
+        body: JSON.stringify({
+          baseUrl: prov.baseUrl,
+          id: prov.id,
+          ...(prov.apiKey ? { apiKey: prov.apiKey } : {}),
+        }),
       })
       const data = await res.json().catch(() => ({}))
 
@@ -202,7 +207,7 @@ export function ApiKeysModal() {
               className="w-full px-2.5 py-1.5 text-xs bg-surface border border-border rounded-md focus:outline-none focus:border-ink-faint"
             >
               <option value="">Auto (first available)</option>
-              {providers.filter((p) => p.apiKey).map((p) => (
+              {providers.filter(providerHasKey).map((p) => (
                 <option key={p.id} value={p.id}>{p.name} ({p.models.length} models)</option>
               ))}
             </select>
@@ -226,7 +231,7 @@ export function ApiKeysModal() {
       <div className="space-y-3 max-h-[60vh] overflow-y-auto">
         {providers.map((provider) => {
           const isExpanded = expanded === provider.id
-          const hasKey = !!provider.apiKey
+          const hasKey = providerHasKey(provider)
           return (
             <div key={provider.id} className="border border-border rounded-lg overflow-hidden">
               <button

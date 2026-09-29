@@ -5,6 +5,7 @@ import { Modal } from './Modal'
 import { useModalStore } from '@/store/modalStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { providerHasKey } from '@/types/provider'
 import { cn } from '@/lib/utils'
 
 export function ModelsModal() {
@@ -17,7 +18,7 @@ export function ModelsModal() {
   useEffect(() => {
     if (activeModal !== 'models') return
     const providerIds = new Set(providers.map((p) => p.id))
-    const fallback = providers.find((p) => p.apiKey) || providers[0]
+    const fallback = providers.find(providerHasKey) || providers[0]
     const fallbackModel = fallback?.models[0]?.id || ''
     for (const a of agents) {
       if (!providerIds.has(a.model.provider) || !a.model.modelName) {
@@ -51,7 +52,7 @@ export function ModelsModal() {
         {agents.map((agent) => {
           const provider = providers.find((p) => p.id === agent.model.provider)
           const providerModels = provider?.models || []
-          const hasKey = !!provider?.apiKey
+          const hasKey = providerHasKey(provider)
           const currentModelValid = providerModels.some((m) => m.id === agent.model.modelName)
 
           return (
@@ -75,7 +76,7 @@ export function ModelsModal() {
                   >
                     {providers.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}{p.apiKey ? '' : ' (no key)'}
+                        {p.name}{providerHasKey(p) ? '' : ' (no key)'}
                       </option>
                     ))}
                   </select>

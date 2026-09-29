@@ -13,7 +13,15 @@ type DocTab = 'general' | string
 export function DocumentsModal() {
   const activeModal = useModalStore((s) => s.activeModal)
   const closeModal = useModalStore((s) => s.closeModal)
-  const { documents, loadDocuments, uploadFile, removeDocument } = useDocumentStore()
+  const {
+    documents,
+    loadDocuments,
+    uploadFile,
+    removeDocument,
+    lastError,
+    lastWarning,
+    clearMessages,
+  } = useDocumentStore()
   const agents = useAgentStore((s) => s.agents)
   const [activeTab, setActiveTab] = useState<DocTab>('general')
   const [dragOver, setDragOver] = useState(false)
@@ -27,6 +35,7 @@ export function DocumentsModal() {
 
   const getIcon = (type: string) => {
     if (type.includes('pdf')) return { label: 'PDF', cls: 'bg-red-100 text-red-700' }
+    if (type.startsWith('image/')) return { label: 'IMG', cls: 'bg-purple-100 text-purple-700' }
     if (type.includes('markdown') || type.includes('md')) return { label: 'MD', cls: 'bg-blue-100 text-blue-700' }
     if (type.includes('json')) return { label: 'JSON', cls: 'bg-yellow-100 text-yellow-700' }
     if (type.includes('csv') || type.includes('sheet')) return { label: 'CSV', cls: 'bg-green-100 text-green-700' }
@@ -58,15 +67,33 @@ export function DocumentsModal() {
         onDragLeave={() => setDragOver(false)}
         onDrop={async (e) => { e.preventDefault(); setDragOver(false); await handleFiles(e.dataTransfer.files) }}
       >
-        <input ref={fileRef} type="file" multiple accept=".pdf,.md,.txt,.json,.csv,.doc,.docx,.xlsx" onChange={(e) => handleFiles(e.target.files)} className="hidden" />
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="mx-auto mb-1.5 text-ink-muted">
+        <input ref={fileRef} type="file" multiple accept=".pdf,.md,.markdown,.txt,.json,.csv,.tsv,.log,.yaml,.yml,.xml,.html,.htm,.sql,.png,.jpg,.jpeg,.gif,.webp" onChange={(e) => handleFiles(e.target.files)} className="hidden" aria-label="Choose documents to upload" />
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="mx-auto mb-1.5 text-ink-muted" aria-hidden="true">
           <path d="M13 11v2.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5V11M9 2v7M6 4.5L9 1.5l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <p className="text-xs text-ink-muted">Drop files here or click to browse</p>
         <p className="text-[10px] text-ink-muted mt-0.5">
-          {activeTab === 'general' ? 'Upload to general knowledge base' : `Upload to ${agents.find((a) => a.id === activeTab)?.name}\'s knowledge base`}
+          {activeTab === 'general' ? 'Upload to general knowledge base' : `Upload to ${agents.find((a) => a.id === activeTab)?.name}'s knowledge base`}
+        </p>
+        <p className="text-[10px] text-ink-muted mt-0.5">
+          PDF and images are read for their text. A vision model must be chosen by a super admin first.
         </p>
       </div>
+
+      {lastError && (
+        <div role="alert" className="mb-4 flex items-start gap-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          <span className="flex-1">{lastError}</span>
+          <button onClick={clearMessages} className="text-red-700 hover:text-red-900 shrink-0" aria-label="Dismiss this message">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+      )}
+
+      {lastWarning && (
+        <div className="mb-4 text-[11px] text-ink-light bg-surface-inset border border-border rounded-md px-3 py-2">
+          {lastWarning}
+        </div>
+      )}
 
       <div className="space-y-1 max-h-[35vh] overflow-y-auto">
         {filtered.length === 0 ? (
@@ -78,10 +105,16 @@ export function DocumentsModal() {
               <div className={cn('w-7 h-7 rounded flex items-center justify-center text-[8px] font-bold shrink-0', icon.cls)}>{icon.label}</div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium text-ink truncate">{doc.name}</div>
-                <div className="text-[10px] text-ink-muted">{formatFileSize(doc.size)}</div>
+                <div className="text-[10px] text-ink-muted">
+                  {formatFileSize(doc.size)}
+                  {' \\u00b7 '}
+                  {doc.content.trim()
+                    ? `${doc.content.trim().length.toLocaleString('en-US')} characters of text`
+                    : 'no text could be read from this file'}
+                </div>
               </div>
-              <button onClick={() => removeDocument(doc.id)} className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-muted hover:text-red-600 transition-all">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+              <button onClick={() => removeDocument(doc.id)} className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-ink-muted hover:text-red-600 transition-all" title={'Remove ' + doc.name}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
               </button>
             </div>
           )

@@ -1,9 +1,12 @@
 import { SidebarLeft } from '@/components/layout/SidebarLeft'
-import { SidebarRight } from '@/components/layout/SidebarRight'
 import { StorageWarning } from '@/components/layout/StorageWarning'
 import { ConfigSync } from '@/components/layout/ConfigSync'
 import { ModalHost } from '@/components/modals/ModalHost'
+import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
 
+// One sidebar, on the left. A second panel on the right used to hold the room and the
+// mode and took a fixed 288px of the window. Its two tabs now live in the left column,
+// so the chat gets the width instead of whatever is left between two panels.
 export default function AppLayout({
   children,
 }: {
@@ -17,8 +20,8 @@ export default function AppLayout({
         <StorageWarning />
         {children}
       </main>
-      <SidebarRight />
       <ModalHost />
+      <OnboardingTour />
     </div>
   )
 }

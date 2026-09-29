@@ -43,9 +43,6 @@ export function TokenMeter({ sessionId }: { sessionId?: string }) {
       <span className="text-ink-muted">
         {messages.length} {messages.length === 1 ? 'message' : 'messages'}
       </span>
-      <span className="ml-auto text-[10px] text-ink-muted">
-        Billing is shown by your provider, not here
-      </span>
     </div>
   )
 }
