@@ -1,7 +1,7 @@
-import type { ProviderConfig } from '@/types/provider'
-import { checkOutboundUrl } from '@/lib/netGuard'
 import { checkChatRateLimit, maxBodyBytes } from '@/lib/rateLimit'
 import { EVIDENCE_RULES, WRITING_RULES } from '@/lib/prompts'
+import { resolveProvider } from '@/lib/providerResolver'
+import { getCurrentUser } from '@/lib/session'
 
 export const runtime = 'nodejs'
 
@@ -11,7 +11,6 @@ interface ImproveRequest {
   mode?: 'chat' | 'persona'
   provider: string
   modelName: string
-  providers: ProviderConfig[]
 }
 
 // Authenticated JSON. No proxy or browser should keep a copy.
@@ -72,16 +71,14 @@ export async function POST(req: Request) {
   if (!text) return jsonResponse({ error: 'Nothing to improve' }, 400)
   if (text.length > 20000) return jsonResponse({ error: 'Text is too long to improve' }, 400)
 
-  const providers = Array.isArray(body?.providers) ? body.providers : []
-  const providerConfig = providers.find((p) => p.id === body?.provider)
-  if (!providerConfig?.apiKey) {
-    return jsonResponse({ error: 'No API key configured for this provider' }, 400)
-  }
+  const account = await getCurrentUser()
+  if (!account) return jsonResponse({ error: 'Unauthorized' }, 401)
 
-  if (process.env.VMA_ALLOW_PRIVATE_BASEURL !== 'true') {
-    const guard = checkOutboundUrl(providerConfig.baseUrl)
-    if (!guard.ok) return jsonResponse({ error: guard.reason }, 400)
-  }
+  // Key and base URL come from this account's stored configuration, not from
+  // the request body.
+  const resolved = await resolveProvider(account.id, body?.provider)
+  if (!resolved.ok) return jsonResponse({ error: resolved.error }, resolved.status)
+  const providerConfig = resolved.provider
 
   const mode = body.mode === 'persona' ? 'persona' : 'chat'
   const instruction = mode === 'persona' ? PERSONA_INSTRUCTION : CHAT_INSTRUCTION

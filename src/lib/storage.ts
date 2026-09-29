@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   sessions: 'vma-sessions',
   activeSession: 'vma-active-session',
   messages: 'vma-messages',
+  tourSeen: 'vma-tour-seen',
 } as const
 
 export function safeSetItem(key: string, value: string): SaveResult {

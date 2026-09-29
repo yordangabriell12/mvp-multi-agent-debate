@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createSessionToken, safeEmailMatch, verifyPassword, SESSION_COOKIE } from '@/lib/auth'
+import { createSessionToken, SESSION_COOKIE } from '@/lib/auth'
+import { authenticate, ensureBootstrapAdmin, sessionClaimsFor, touchLogin } from '@/lib/users'
 import {
   checkRateLimit,
   clearFailures,
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
   let password = ''
   try {
     const body = await req.json()
-    email = String(body?.email ?? '').trim().toLowerCase()
+    email = String(body?.email ?? '').trim()
     password = String(body?.password ?? '')
   } catch {
     return NextResponse.json({ error: 'Permintaan tidak valid.' }, { status: 400 })
@@ -66,24 +67,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Email dan password wajib diisi.' }, { status: 400 })
   }
 
-  const expectedEmail = (process.env.VMA_AUTH_EMAIL || '').trim().toLowerCase()
-  const expectedHash = process.env.VMA_AUTH_PASSWORD_HASH || ''
-  const expectedPlain = process.env.VMA_AUTH_PASSWORD || ''
   const secret = process.env.VMA_SESSION_SECRET || ''
-
-  if (!expectedEmail || !secret || (!expectedHash && !expectedPlain)) {
-    return NextResponse.json(
-      { error: 'Autentikasi server belum dikonfigurasi.' },
-      { status: 500 }
-    )
+  if (!secret) {
+    return NextResponse.json({ error: 'Autentikasi server belum dikonfigurasi.' }, { status: 500 })
   }
 
-  // Run the hash comparison unconditionally so a wrong email and a wrong
-  // password take a comparable amount of time.
-  const passwordOk = await verifyPassword(password, expectedHash || expectedPlain)
-  const emailOk = safeEmailMatch(email, expectedEmail)
+  // Creates the first admin from the environment credentials if the user list is
+  // still empty, so an existing deployment keeps the login it already had.
+  await ensureBootstrapAdmin()
 
-  if (!emailOk || !passwordOk) {
+  const user = await authenticate(email, password)
+  if (!user) {
     recordFailure(ip)
     recordGlobalFailure()
     await new Promise((resolve) =>
@@ -93,9 +87,17 @@ export async function POST(req: Request) {
   }
 
   clearFailures(ip)
+  await touchLogin(user.id)
 
-  const token = await createSessionToken(expectedEmail, secret, SESSION_TTL_SECONDS)
-  const response = NextResponse.json({ ok: true })
+  const token = await createSessionToken(sessionClaimsFor(user), secret, SESSION_TTL_SECONDS)
+
+  const response = NextResponse.json({
+    ok: true,
+    // Returned so the client can route without reading the cookie, which is
+    // HttpOnly and therefore invisible to JavaScript.
+    mustChangePassword: user.mustChangePassword,
+    role: user.role,
+  })
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: isHttps(req),

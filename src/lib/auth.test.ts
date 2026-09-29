@@ -66,28 +66,47 @@ describe('verifyPassword', () => {
 
 describe('session tokens', () => {
   it('round-trips a valid token', async () => {
-    const token = await createSessionToken('me@example.com', SECRET, 3600)
+    const token = await createSessionToken({ sub: 'user-1', email: 'me@example.com' }, SECRET, 3600)
     const payload = await verifySessionToken(token, SECRET)
-    expect(payload?.sub).toBe('me@example.com')
+    expect(payload?.sub).toBe('user-1')
+    expect(payload?.email).toBe('me@example.com')
+  })
+
+  it('carries a role and the password flag', async () => {
+    const token = await createSessionToken(
+      { sub: 'user-1', email: 'me@example.com', role: 'admin', pwd: true },
+      SECRET,
+      3600
+    )
+    const payload = await verifySessionToken(token, SECRET)
+    expect(payload?.role).toBe('admin')
+    expect(payload?.pwd).toBe(true)
   })
 
   it('rejects a token signed with a different secret', async () => {
-    const token = await createSessionToken('me@example.com', SECRET, 3600)
+    const token = await createSessionToken({ sub: 'user-1' }, SECRET, 3600)
     expect(await verifySessionToken(token, 'a-different-secret')).toBeNull()
   })
 
   it('rejects a tampered payload', async () => {
-    const token = await createSessionToken('me@example.com', SECRET, 3600)
+    const token = await createSessionToken({ sub: 'user-1' }, SECRET, 3600)
     const [body, signature] = token.split('.')
     const forgedBody = Buffer.from(
-      JSON.stringify({ sub: 'attacker@example.com', iat: 0, exp: 9999999999 })
+      JSON.stringify({ sub: 'user-999', iat: 0, exp: 9999999999 })
     ).toString('base64url')
     expect(await verifySessionToken(`${forgedBody}.${signature}`, SECRET)).toBeNull()
     expect(await verifySessionToken(`${body}.forged`, SECRET)).toBeNull()
   })
 
+  it('rejects a token with no subject', async () => {
+    // A payload that verifies but names nobody must not be accepted: every
+    // lookup downstream is keyed on `sub`.
+    const token = await createSessionToken({ sub: '' }, SECRET, 3600)
+    expect(await verifySessionToken(token, SECRET)).toBeNull()
+  })
+
   it('rejects an expired token', async () => {
-    const token = await createSessionToken('me@example.com', SECRET, -10)
+    const token = await createSessionToken({ sub: 'user-1' }, SECRET, -10)
     expect(await verifySessionToken(token, SECRET)).toBeNull()
   })
 
@@ -99,7 +118,7 @@ describe('session tokens', () => {
   })
 
   it('rejects any token when the secret is missing', async () => {
-    const token = await createSessionToken('me@example.com', SECRET, 3600)
+    const token = await createSessionToken({ sub: 'user-1' }, SECRET, 3600)
     expect(await verifySessionToken(token, '')).toBeNull()
   })
 })

@@ -11,8 +11,14 @@ const PBKDF2_ITERATIONS = 210000
 const PBKDF2_KEY_BYTES = 32
 
 export interface SessionPayload {
-  /** Subject: the authenticated email address. */
+  /** Subject: the account id. */
   sub: string
+  /** Email, carried so the UI can greet the user without another request. */
+  email?: string
+  /** Role, carried so the proxy can gate admin routes without a store read. */
+  role?: 'admin' | 'user'
+  /** Set when the account must replace its password before doing anything else. */
+  pwd?: boolean
   /** Issued at (unix seconds). */
   iat: number
   /** Expires at (unix seconds). */
@@ -132,12 +138,12 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 export async function createSessionToken(
-  subject: string,
+  claims: Omit<SessionPayload, 'iat' | 'exp'>,
   secret: string,
   ttlSeconds: number
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
-  const payload: SessionPayload = { sub: subject, iat: now, exp: now + ttlSeconds }
+  const payload: SessionPayload = { ...claims, iat: now, exp: now + ttlSeconds }
   const body = toBase64Url(encoder.encode(JSON.stringify(payload)))
   const key = await importHmacKey(secret)
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(body))

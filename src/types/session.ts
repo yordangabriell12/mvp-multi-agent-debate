@@ -7,7 +7,18 @@ export interface SessionSettings {
   loopSpeed: LoopSpeed
   maxRounds: number | 'unlimited'
   moderatorEnabled: boolean
-  roleLock: boolean
+  /**
+   * Deep search for this session.
+   *
+   * Deliberately a session setting rather than a per-run snapshot: it is read
+   * fresh at each agent turn, so switching it on or off takes effect from the
+   * next turn and never leaves a run half-configured. Anything already gathered
+   * stays in the conversation as ordinary messages, so turning it off does not
+   * lose research that has already been collected.
+   */
+  deepSearch: boolean
+  /** How many searches one agent may make in a single turn. */
+  deepSearchMaxQueries?: number
 }
 
 export interface Session {
@@ -50,4 +61,16 @@ export const PRESET_MODES: Record<PresetMode, { label: string; description: stri
     description: 'Your own configuration. Set the rules.',
     icon: '·',
   },
+}
+
+/**
+ * True when a value is one of the preset keys.
+ *
+ * Used when reading sessions back from storage, where the value may come from an
+ * older build. Without this check an unrecognised key would be kept, and since no
+ * preset card matches it the screen would show every option as inactive, which
+ * reads as "you have not chosen a mode" rather than "that mode no longer exists".
+ */
+export function isPresetMode(value: unknown): value is PresetMode {
+  return typeof value === 'string' && value in PRESET_MODES
 }

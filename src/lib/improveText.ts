@@ -1,8 +1,11 @@
 // Client helper for the "improve text" action.
 //
 // Picks a model to do the rewriting: the moderator's model when one is chosen,
-// otherwise the first provider that has a key. The request goes through
-// /api/improve so the API key never reaches the provider straight from here.
+// otherwise the first provider that has a key.
+//
+// "Has a key" is read from `hasKey`, not `apiKey`. A non-admin account never
+// receives the key itself, so `apiKey` is empty for everyone except the admin,
+// and the server resolves the real key from the provider id in the request.
 
 import { useSettingsStore } from '@/store/settingsStore'
 
@@ -12,15 +15,20 @@ export interface ImproveResult {
   error?: string
 }
 
+/** True when the server holds a key for this provider. */
+function isConfigured(provider: { apiKey?: string; hasKey?: boolean }): boolean {
+  return Boolean(provider.hasKey || provider.apiKey)
+}
+
 function pickModel(): { provider: string; modelName: string } | null {
   const { providers, moderatorProviderId, moderatorModelId } = useSettingsStore.getState()
 
-  const moderatorProvider = providers.find((p) => p.id === moderatorProviderId && p.apiKey)
+  const moderatorProvider = providers.find((p) => p.id === moderatorProviderId && isConfigured(p))
   if (moderatorProvider && moderatorModelId) {
     return { provider: moderatorProvider.id, modelName: moderatorModelId }
   }
 
-  const usable = providers.find((p) => p.apiKey && p.models.length > 0)
+  const usable = providers.find((p) => isConfigured(p) && p.models.length > 0)
   if (!usable) return null
   return { provider: usable.id, modelName: usable.models[0].id }
 }
@@ -34,7 +42,7 @@ export async function improveText(
 
   const model = pickModel()
   if (!model) {
-    return { ok: false, error: 'Add an API key first, in API Keys.' }
+    return { ok: false, error: 'Belum ada kunci API yang aktif. Hubungi super admin.' }
   }
 
   try {
@@ -46,7 +54,6 @@ export async function improveText(
         mode,
         provider: model.provider,
         modelName: model.modelName,
-        providers: useSettingsStore.getState().providers.filter((p) => p.apiKey),
       }),
     })
 
@@ -60,3 +67,4 @@ export async function improveText(
     return { ok: false, error: 'Could not reach the server.' }
   }
 }
+

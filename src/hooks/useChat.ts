@@ -7,6 +7,8 @@ import { useDocumentStore } from '@/store/documentStore'
 import { usePendingStore } from '@/store/pendingStore'
 import type { Message } from '@/types/message'
 import { extractAgentTags, findAgentsInMessage, parseDecision, resolveRoundCap } from '@/lib/debate'
+import { proposeQueries, researchFor } from '@/lib/deepSearch'
+import { selectAgentsForQuestion } from '@/lib/routing'
 import { QUALITY_RULES } from '@/lib/prompts'
 
 const MODE_PREFIXES: Record<string, string> = {
@@ -92,6 +94,18 @@ export function useChat(sessionId: string) {
   // Web search results for the current user question, filled once per send and
   // reused for every agent that has web search enabled.
   const webSearchRef = useRef('')
+  /**
+   * Deep search research, keyed by agent.
+   *
+   * Per agent rather than one shared block, because the point of the feature is
+   * that each agent looks up what its own role needs. Cleared at the start of
+   * every send so a new question never inherits the previous question's findings.
+   *
+   * The toggle itself is deliberately not held here. It is read from the session
+   * at the moment each agent runs (see deepSearchFor), so switching it on or off
+   * takes effect on the next agent and never leaves a half-configured run.
+   */
+  const researchRef = useRef<Record<string, string>>({})
   const agents = useAgentStore((s) => s.agents)
   const providers = useSettingsStore((s) => s.providers)
   const addMessage = useChatStore((s) => s.addMessage)
@@ -115,7 +129,8 @@ export function useChat(sessionId: string) {
 
   const buildContext = useCallback((
     history: Message[], agentName: string, agentId: string,
-    agentsMap: Record<string, string>, liveResponses: Record<string, string>, isDebate = false, moderatorQuestion = ""
+    agentsMap: Record<string, string>, liveResponses: Record<string, string>, isDebate = false, moderatorQuestion = "",
+    research = ''
   ): { role: 'user' | 'assistant'; content: string }[] => {
     const userMsgs = history.filter((m) => m.role === 'user')
     const latestUser = userMsgs[userMsgs.length - 1]
@@ -139,10 +154,6 @@ export function useChat(sessionId: string) {
       personaBlock += 'Depth: ' + (persona.depth > 0.7 ? 'Give thorough detailed responses with examples.' : persona.depth > 0.4 ? 'Give balanced responses.' : 'Keep responses brief and focused.') + NL
       personaBlock += 'Confidence: ' + (persona.confidence > 0.7 ? 'Be assertive. State position clearly.' : 'Express uncertainty where appropriate.') + NL
       personaBlock += 'Adapt length to topic complexity. Simple = 2-3 sentences. Complex = up to 5 sentences.' + NL
-      // Role Lock: keep the agent inside the remit it was configured for.
-      if (session?.settings.roleLock) {
-        personaBlock += 'Stay strictly within your assigned role. If a question falls outside your expertise, say so briefly and defer to the colleague who owns it.' + NL
-      }
     }
     let skillsBlock = ''
     if (skills.length > 0) {
@@ -169,6 +180,10 @@ export function useChat(sessionId: string) {
     if (agent?.webSearch && webSearchRef.current) {
       webSearchBlock = DNL + webSearchRef.current + NL
     }
+    // Deep search findings for this agent, gathered just before this turn. Passed
+    // in rather than read from a ref so the caller decides when it applies, and an
+    // empty string simply means no research this turn.
+    const researchBlock = research ? DNL + research + NL : ''
 
     const mp = getModePrefix()
     const recent = history.slice(-100)
@@ -188,26 +203,15 @@ export function useChat(sessionId: string) {
     const linesStr = lines.join(NL)
     const prefix = mp ? mp + DNL : ''
     if (isDebate) {
-      return [{ role: 'user' as const, content: 'You are ' + agentName + '. This is a HIGH-STAKES debate. Others below are THEIR OWN statements.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + QUALITY_RULES + 'DEBATE RULES:' + NL + '1. DISAGREE if you see flaws. Say "That is wrong because..." not "I see your point, but..."' + NL + '2. CHALLENGE weak evidence. Ask "Where is the data?" "Have you actually tested this?"' + NL + '3. Use SPECIFIC examples, numbers, cases. Vague claims get called out.' + NL + '4. Be CONCISE but SHARP. 4-6 sentences. Every sentence must add value.' + NL + '5. Do NOT include your name or title.' + NL + LANG_RULE + rag + DNL + linesStr + DNL + 'Respond now.' }]
+      return [{ role: 'user' as const, content: 'You are ' + agentName + '. This is a HIGH-STAKES debate. Others below are THEIR OWN statements.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + researchBlock + QUALITY_RULES + 'DEBATE RULES:' + NL + '1. DISAGREE if you see flaws. Say "That is wrong because..." not "I see your point, but..."' + NL + '2. CHALLENGE weak evidence. Ask "Where is the data?" "Have you actually tested this?"' + NL + '3. Use SPECIFIC examples, numbers, cases. Vague claims get called out.' + NL + '4. Be CONCISE but SHARP. 4-6 sentences. Every sentence must add value.' + NL + '5. Do NOT include your name or title.' + NL + LANG_RULE + rag + DNL + linesStr + DNL + 'Respond now.' }]
     }
     const questionToAnswer = moderatorQuestion || (latestUser?.content || '')
     const questionLabel = moderatorQuestion ? 'MODERATOR ASKS' : 'USER ASKS'
-    return [{ role: 'user' as const, content: 'You are ' + agentName + ', a participant in a multi-agent discussion room.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + webSearchBlock + QUALITY_RULES + 'INSTRUCTIONS:' + NL + '1. Respond to ' + questionLabel + ' below.' + NL + '2. Be concise.' + NL + '3. Do NOT include your name or title in response.' + NL + '4. Do not repeat earlier points. Reference what others said above.' + LANG_RULE + rag + DNL + questionLabel + ': "' + questionToAnswer + '"' + NL + 'Context:' + NL + (linesStr || '(first message)') + DNL + 'Respond.' }]
+    return [{ role: 'user' as const, content: 'You are ' + agentName + ', a participant in a multi-agent discussion room.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + webSearchBlock + researchBlock + QUALITY_RULES + 'INSTRUCTIONS:' + NL + '1. Respond to ' + questionLabel + ' below.' + NL + '2. Be concise.' + NL + '3. Do NOT include your name or title in response.' + NL + '4. Do not repeat earlier points. Reference what others said above.' + LANG_RULE + rag + DNL + questionLabel + ': "' + questionToAnswer + '"' + NL + 'Context:' + NL + (linesStr || '(first message)') + DNL + 'Respond.' }]
   }, [buildRagContext, getModePrefix])
-
   const getTargetAgents = useCallback((content: string): { id: string; name: string }[] => {
     const roomAgents = agents.filter((a) => session?.agentIds.includes(a.id))
-    if (/@all\b/i.test(content)) return roomAgents.map((a) => ({ id: a.id, name: a.name }))
-    const mentions = content.match(/@(\w+)/g)?.map((m) => m.slice(1).toLowerCase()) || []
-    if (mentions.length > 0) return roomAgents.filter((a) => mentions.includes(a.name.toLowerCase())).map((a) => ({ id: a.id, name: a.name }))
-    const lower = content.toLowerCase()
-    const scored = roomAgents.map((a) => {
-      const rw = (a.roleTitle + ' ' + a.name + ' ' + a.systemPrompt).toLowerCase()
-      let s = 0
-      for (const k of ['finance','sales','legal','money','law','revenue','contract','invest','cost','risk','tax','hiring','marketing','budget','debt','profit','cashflow','litigation','compliance','pricing']) if (rw.includes(k) && lower.includes(k)) s++
-      return { id: a.id, name: a.name, score: s }
-    }).sort((a, b) => b.score - a.score)
-    return (scored[0]?.score > 0 ? scored.filter((s) => s.score > 0).slice(0, 2) : scored.slice(0, 1)).map((a) => ({ id: a.id, name: a.name }))
+    return selectAgentsForQuestion(roomAgents, content).map((a) => ({ id: a.id, name: a.name }))
   }, [agents, session])
 
   /**
@@ -253,6 +257,80 @@ export function useChat(sessionId: string) {
   }, [agents, session])
 
   /**
+   * Researches for one agent, if this session has deep search on right now.
+   *
+   * The toggle is read here, at the moment the agent is about to run, rather than
+   * captured when the send started. That is what makes switching it on or off
+   * mid-conversation harmless: only the turns that follow see the change, nothing
+   * is left half-configured, and research already gathered stays in the
+   * conversation as ordinary messages.
+   *
+   * Returns the block to put in this agent's context, or an empty string.
+   */
+  const deepSearchFor = useCallback(
+    async (agentId: string, question: string): Promise<string> => {
+      const cached = researchRef.current[agentId]
+      if (cached) return cached
+
+      // Read live, not from a snapshot taken when the send began.
+      const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
+      if (!current?.settings.deepSearch) return ''
+
+      const agent = agents.find((a) => a.id === agentId)
+      if (!agent?.model.provider || !agent.model.modelName) return ''
+
+      // The agent decides what to look up, in its own voice. One small call.
+      const queries = await proposeQueries(
+        agent.roleTitle + ' (' + agent.name + '): ' + agent.systemPrompt.slice(0, 300),
+        question,
+        current.settings.deepSearchMaxQueries ?? 2,
+        { provider: agent.model.provider, modelName: agent.model.modelName }
+      )
+      if (queries.length === 0) return ''
+
+      // A visible trace of what was looked up, so the research in the answer can
+      // be told apart from the model's own knowledge.
+      addMessage(sessionId, {
+        role: 'search',
+        content: agent.name + ' mencari: ' + queries.join(' | '),
+        sessionId,
+        metadata: { searchQuery: queries.join(' | '), searchSource: 'deep search' },
+      })
+
+      if (stoppedRef.current) return ''
+
+      const research = await researchFor(queries, question)
+
+      if (research.results.length > 0) {
+        // Also written into the conversation, so it counts as gathered context
+        // for the remaining agents and for every turn after this one.
+        addMessage(sessionId, {
+          role: 'search',
+          content: 'Hasil riset untuk ' + agent.name,
+          sessionId,
+          metadata: {
+            searchQuery: queries.join(' | '),
+            searchSource: research.sources.join(', '),
+            searchResults: research.results,
+          },
+        })
+      }
+
+      if (research.warning) {
+        addMessage(sessionId, {
+          role: 'system',
+          content: 'Sebagian sumber tidak bisa dihubungi: ' + research.warning,
+          sessionId,
+        })
+      }
+
+      researchRef.current[agentId] = research.block
+      return research.block
+    },
+    [agents, sessionId, addMessage]
+  )
+
+  /**
    * Parks the debate loop while the session is paused. Bounded so a session left
    * paused overnight eventually resumes instead of holding the request forever.
    */
@@ -274,15 +352,19 @@ export function useChat(sessionId: string) {
   ): Promise<string> => {
     const agent = agents.find((a) => a.id === agentId)
     if (!agent) return ''
+    // `hasKey` says whether the server holds a key for this provider. The key
+    // itself never reaches the browser, so this is the only signal available.
     const provider = providers.find((p) => p.id === agent.model.provider)
-    if (!provider?.apiKey) { addMessage(sessionId, { role: 'system', content: agent.name + ' skipped - no API key', sessionId }); return '' }
+    if (!provider?.hasKey) { addMessage(sessionId, { role: 'system', content: agent.name + ' dilewati: belum ada kunci API untuk ' + (provider?.name || agent.model.provider) + '. Minta super admin mengisinya di API Keys.', sessionId }); return '' }
     const controller = new AbortController()
     abortRef.current.push(controller)
     try {
       setStreaming((prev) => ({ ...prev, [agent.id]: 'formulating response' }))
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: chatMessages, agent: { id: agent.id, name: agent.name, systemPrompt: overridePrompt || agent.systemPrompt, provider: provider.id, modelName: agent.model.modelName, temperature: agent.model.temperature }, providers: providers.filter((p) => p.apiKey) }),
+        // Only the provider id is sent. The server looks up the key it has
+        // stored for this account, so no credential travels in the request.
+        body: JSON.stringify({ messages: chatMessages, agent: { id: agent.id, name: agent.name, systemPrompt: overridePrompt || agent.systemPrompt, provider: provider.id, modelName: agent.model.modelName, temperature: agent.model.temperature } }),
         signal: controller.signal,
       })
       if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed') }
@@ -328,9 +410,9 @@ export function useChat(sessionId: string) {
     if (recent.length < 2) return false
     const lines = recent.map((m) => '[' + (m.agentId ? (agentsMap[m.agentId] || 'Advisor') : 'Advisor') + ']: ' + m.content.slice(0, 300)).join(NL)
     const provider = providers.find((p) => p.id === first.model.provider)
-    if (!provider?.apiKey) return false
+    if (!provider?.hasKey) return false
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user' as const, content: 'CONSENSUS or CONTINUE?' + DNL + lines }], agent: { id: first.id, name: first.name, systemPrompt: 'Reply one word: CONSENSUS or CONTINUE.', provider: provider.id, modelName: first.model.modelName, temperature: 0 }, providers: providers.filter((p) => p.apiKey) }) })
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user' as const, content: 'CONSENSUS or CONTINUE?' + DNL + lines }], agent: { id: first.id, name: first.name, systemPrompt: 'Reply one word: CONSENSUS or CONTINUE.', provider: provider.id, modelName: first.model.modelName, temperature: 0 } }) })
       const reader = res.body?.getReader(); if (!reader) return false
       const decoder = new TextDecoder(); let text = ''
       while (true) { const { done, value } = await reader.read(); if (done) break; text += decoder.decode(value, { stream: true }) }
@@ -372,8 +454,8 @@ export function useChat(sessionId: string) {
       const moderatorProviderId = useSettingsStore.getState().moderatorProviderId
       const moderatorModelId = useSettingsStore.getState().moderatorModelId
       const modProvider = moderatorProviderId
-        ? providers.find((p) => p.id === moderatorProviderId && p.apiKey)
-        : providers.find((p) => p.apiKey)
+        ? providers.find((p) => p.id === moderatorProviderId && p.hasKey)
+        : providers.find((p) => p.hasKey)
       if (!modProvider) {
         addMessage(sessionId, { role: 'system', content: 'No API key configured for moderator.', sessionId })
         updateSession(session.id, { status: 'idle' })
@@ -424,6 +506,11 @@ export function useChat(sessionId: string) {
         discussionTopic = topicAnswer2
       }
 
+      // Reset the per-send research cache. Nothing carries over from the previous
+      // question, so turning Deep Search off and on again cannot resurrect old
+      // findings, and the same question always starts from the same place.
+      researchRef.current = {}
+
       await prepareWebSearch(discussionTopic)
 
       const openCtx = [{ role: 'user' as const, content: 'USER QUESTION: "' + discussionTopic + '"' + DNL + 'PARTICIPANTS: ' + agentList + DNL + 'Call the FIRST agent by name with a specific question based on their expertise. Max 2 sentences. ' + LANG_RULE }]
@@ -453,7 +540,10 @@ export function useChat(sessionId: string) {
         // Pass moderator's opening question so agent responds to THAT
         const modHist = hist.filter(m => m.role === 'moderator')
         const lastModQ = modHist.length > 0 ? modHist[modHist.length - 1].content : ''
-        const ctx = buildContext(hist, target.name, target.id, agentsMap, {}, false, lastModQ)
+        // Researched here, right before the agent speaks, so the toggle is read at
+        // the moment of this turn rather than when the whole run started.
+        const openingResearch = await deepSearchFor(target.id, lastModQ || discussionTopic)
+        const ctx = buildContext(hist, target.name, target.id, agentsMap, {}, false, lastModQ, openingResearch)
         await callAgent(target.id, ctx)
         agentsSpoken.add(target.name)
         totalTurns++
@@ -475,7 +565,8 @@ export function useChat(sessionId: string) {
               const followUpCtx = [{ role: 'user' as const, content: tagParsed.question + DNL + 'This is a follow-up question for ' + tagName + '. Max 2 sentences. ' + LANG_RULE }]
               await callMod(followUpCtx, modAgent)
               const hist2 = useChatStore.getState().messages[sessionId] || []
-              const agentCtx = buildContext(hist2, taggedAgent.name, taggedAgent.id, agentsMap, {}, false)
+              const tagResearch = await deepSearchFor(taggedAgent.id, tagParsed.question)
+              const agentCtx = buildContext(hist2, taggedAgent.name, taggedAgent.id, agentsMap, {}, false, '', tagResearch)
               await callAgent(taggedAgent.id, agentCtx)
               agentsSpoken.add(taggedAgent.name)
               totalTurns++
@@ -558,7 +649,8 @@ export function useChat(sessionId: string) {
           await waitWhilePaused()
           if (stoppedRef.current) break
           const hist3 = useChatStore.getState().messages[sessionId] || []
-          const agentCtx = buildContext(hist3, ft.name, ft.id, agentsMap, {}, false, decision.question || '')
+          const followResearch = await deepSearchFor(ft.id, decision.question || discussionTopic)
+          const agentCtx = buildContext(hist3, ft.name, ft.id, agentsMap, {}, false, decision.question || '', followResearch)
           await callAgent(ft.id, agentCtx)
           agentsSpoken.add(ft.name)
           totalTurns++
@@ -609,6 +701,8 @@ export function useChat(sessionId: string) {
 
     } else {
       // ========== NORMAL MODE ==========
+      researchRef.current = {}
+
       await prepareWebSearch(content)
       const targets = getTargetAgents(content)
       const liveResponses: Record<string, string> = {}
@@ -618,7 +712,8 @@ export function useChat(sessionId: string) {
         const agent = agents.find((a) => a.id === firstTarget?.id)
         if (!agent) return
         const history = useChatStore.getState().messages[sessionId] || []
-        const ctx = buildContext(history, agent.name, agent.id, agentsMap, liveResponses, false)
+        const research = await deepSearchFor(agent.id, content)
+        const ctx = buildContext(history, agent.name, agent.id, agentsMap, liveResponses, false, '', research)
         const text = await callAgent(agent.id, ctx, (t) => { liveResponses[agent.id] = t })
         liveResponses[agent.id] = text
       })()
@@ -632,7 +727,9 @@ export function useChat(sessionId: string) {
           if (!agent) return
           await new Promise((r) => setTimeout(r, speedDelay(session.settings.loopSpeed, 300)))
           const history = useChatStore.getState().messages[sessionId] || []
-          const ctx = buildContext(history, agent.name, agent.id, agentsMap, liveResponses, false)
+          // Each agent researches its own angle, in parallel with the others.
+          const research = await deepSearchFor(agent.id, content)
+          const ctx = buildContext(history, agent.name, agent.id, agentsMap, liveResponses, false, '', research)
           const text = await callAgent(agent.id, ctx, (t) => { liveResponses[agent.id] = t })
           liveResponses[agent.id] = text
         })
@@ -675,7 +772,7 @@ export function useChat(sessionId: string) {
 
     updateSession(session.id, { status: 'idle' })
     setLoading(false)
-  }, [session, sessionId, agents, providers, getTargetAgents, buildContext, callAgent, checkConsensus, updateSession, addMessage, prepareWebSearch, waitWhilePaused])
+  }, [session, sessionId, agents, providers, getTargetAgents, buildContext, callAgent, checkConsensus, updateSession, addMessage, prepareWebSearch, deepSearchFor, waitWhilePaused])
 
   // Build transcript for moderator decision-making
   const buildTranscript = useCallback((
@@ -755,14 +852,14 @@ export function useChat(sessionId: string) {
   // Helper: call moderator (virtual entity using any provider)
   const callMod = useCallback(async (msgs: { role: 'user' | 'assistant'; content: string }[], modAgent: { id: string; name: string; systemPrompt: string; provider: string; modelName: string }): Promise<string> => {
     const provider = providers.find((p) => p.id === modAgent.provider)
-    if (!provider?.apiKey) return ''
+    if (!provider?.hasKey) return ''
     const controller = new AbortController()
     abortRef.current.push(controller)
     try {
       setStreaming((prev) => ({ ...prev, [modAgent.id]: 'analyzing discussion' }))
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: msgs, agent: modAgent, providers: providers.filter((p) => p.apiKey) }),
+        body: JSON.stringify({ messages: msgs, agent: modAgent }),
         signal: controller.signal,
       })
       if (!res.ok) return ''
@@ -798,13 +895,13 @@ export function useChat(sessionId: string) {
   // Silent moderator call - does NOT add to chat UI (used for decision-making)
   const callModSilent = useCallback(async (msgs: { role: 'user' | 'assistant'; content: string }[], modAgent: { id: string; name: string; systemPrompt: string; provider: string; modelName: string }): Promise<string> => {
     const provider = providers.find((p) => p.id === modAgent.provider)
-    if (!provider?.apiKey) return ''
+    if (!provider?.hasKey) return ''
     const controller = new AbortController()
     abortRef.current.push(controller)
     try {
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: msgs, agent: modAgent, providers: providers.filter((p) => p.apiKey) }),
+        body: JSON.stringify({ messages: msgs, agent: modAgent }),
         signal: controller.signal,
       })
       if (!res.ok) return ''

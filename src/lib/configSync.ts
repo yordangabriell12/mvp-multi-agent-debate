@@ -12,6 +12,9 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useSessionStore } from '@/store/sessionStore'
 import { useChatStore } from '@/store/chatStore'
+import { useOnboardingStore } from '@/store/onboardingStore'
+import { useUiStore } from '@/store/uiStore'
+import { fetchMe } from '@/lib/currentUser'
 import { STORAGE_KEYS, safeSetItem, safeGetItem } from '@/lib/storage'
 
 const PUSH_DEBOUNCE_MS = 2500
@@ -28,6 +31,7 @@ interface SyncPayload {
   sessions: unknown
   activeSessionId: string | null
   messages: unknown
+  tourSeen?: boolean
 }
 
 function collect(): SyncPayload {
@@ -42,6 +46,7 @@ function collect(): SyncPayload {
     sessions: useSessionStore.getState().sessions,
     activeSessionId: useSessionStore.getState().activeSessionId,
     messages: useChatStore.getState().messages,
+    tourSeen: useOnboardingStore.getState().seen,
   }
 }
 
@@ -70,10 +75,20 @@ function scheduleConfigPush(): void {
   }, PUSH_DEBOUNCE_MS)
 }
 
+/**
+ * Applies a configuration from the server.
+ *
+ * Every branch assigns unconditionally, including when the server value is
+ * missing or empty. That matters for a newly created account: it starts with no
+ * sessions and no messages, and if an empty value were skipped the browser would
+ * keep showing whatever the last person left in localStorage. The server is the
+ * authority on what this account's workspace contains, empty included.
+ */
 function applyConfig(config: Partial<SyncPayload>): void {
-  if (config.providers && Array.isArray(config.providers) && config.providers.length > 0) {
-    useSettingsStore.setState({ providers: config.providers as never })
-    safeSetItem(STORAGE_KEYS.providers, JSON.stringify(config.providers))
+  const providers = Array.isArray(config.providers) ? config.providers : null
+  if (providers) {
+    useSettingsStore.setState({ providers: providers as never })
+    safeSetItem(STORAGE_KEYS.providers, JSON.stringify(providers))
   }
 
   if (config.moderator) {
@@ -82,14 +97,16 @@ function applyConfig(config: Partial<SyncPayload>): void {
     safeSetItem(STORAGE_KEYS.moderator, JSON.stringify(config.moderator))
   }
 
-  if (config.agents && Array.isArray(config.agents) && config.agents.length > 0) {
-    useAgentStore.setState({ agents: config.agents as never })
-    safeSetItem(STORAGE_KEYS.agents, JSON.stringify(config.agents))
+  const agents = Array.isArray(config.agents) ? config.agents : null
+  if (agents) {
+    useAgentStore.setState({ agents: agents as never })
+    safeSetItem(STORAGE_KEYS.agents, JSON.stringify(agents))
   }
 
-  if (config.sessions && Array.isArray(config.sessions)) {
+  if (Array.isArray(config.sessions)) {
     const activeSessionId =
-      config.activeSessionId && config.sessions.some((s: { id?: string }) => s?.id === config.activeSessionId)
+      config.activeSessionId &&
+      config.sessions.some((s: { id?: string }) => s?.id === config.activeSessionId)
         ? config.activeSessionId
         : ((config.sessions[0] as { id?: string } | undefined)?.id ?? null)
     useSessionStore.setState({ sessions: config.sessions as never, activeSessionId })
@@ -101,6 +118,10 @@ function applyConfig(config: Partial<SyncPayload>): void {
     useChatStore.setState({ messages: config.messages as never })
     safeSetItem(STORAGE_KEYS.messages, JSON.stringify(config.messages))
   }
+
+  if (typeof config.tourSeen === 'boolean') {
+    useOnboardingStore.setState({ seen: config.tourSeen })
+  }
 }
 
 export async function loadRemoteConfig(): Promise<void> {
@@ -110,9 +131,13 @@ export async function loadRemoteConfig(): Promise<void> {
 
     const data = await res.json()
     if (data?.warning) console.warn('Config store warning:', data.warning)
+
     if (!data?.config) {
-      // First run on a fresh server: seed it from whatever is already local.
-      scheduleConfigPush()
+      // The server has no configuration for this account at all. That is only
+      // reachable on a storage failure, because a fresh account gets an empty
+      // configuration rather than a null one. Pushing local state up would seed
+      // a new account with the previous browser's data, so nothing is pushed;
+      // the warning above is the honest report.
       return
     }
 
@@ -138,6 +163,17 @@ export function initConfigSync(): void {
   useAgentStore.subscribe(scheduleConfigPush)
   useSessionStore.subscribe(scheduleConfigPush)
   useChatStore.subscribe(scheduleConfigPush)
+  useOnboardingStore.subscribe(scheduleConfigPush)
 
-  void loadRemoteConfig()
+  // The account is fetched first. Its answer decides whether this browser is
+  // looking at a real workspace or at leftovers from the previous account, and
+  // only then is the configuration pulled.
+  void (async () => {
+    const me = await fetchMe()
+    if (me) {
+      useOnboardingStore.getState().hydrate(me.tourSeen)
+      useUiStore.getState().setFromAccount({ isAdmin: me.user.isAdmin })
+    }
+    await loadRemoteConfig()
+  })()
 }
