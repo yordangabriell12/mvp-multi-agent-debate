@@ -24,6 +24,23 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# Chromium, for the search layer that opens result pages.
+#
+# The search falls back to a real browser for questions the API layers cannot answer,
+# such as a regulation that lives as a PDF on a government site. That needs a browser
+# in the image, and the image has none: Alpine ships no Chromium and Google Chrome is
+# not available for musl at all.
+#
+# Alpine's own chromium is a real Chromium, so Playwright can drive it. It has to be
+# named through VMA_CHROMIUM_PATH, because Playwright otherwise looks for its own
+# bundled build, which is a glibc binary and would not start here.
+#
+# The fonts are not optional. A browser with no fonts renders text as blank boxes, so
+# a page would load and hand back nothing readable, which looks exactly like a site
+# with no content rather than a broken image.
+RUN apk add --no-cache chromium font-noto
+ENV VMA_CHROMIUM_PATH=/usr/bin/chromium
+
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 

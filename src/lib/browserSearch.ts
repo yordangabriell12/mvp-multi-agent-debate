@@ -211,14 +211,33 @@ export async function searchWithBrowser(
     // Imported lazily so the package is loaded only when a search needs a browser.
     const { chromium } = await import('playwright')
 
-    // `channel: 'chrome'` uses the browser already installed on the machine rather
-    // than a downloaded Chromium, which keeps the deployment small and renders pages
-    // the way a person would see them.
-    browser = await chromium.launch({
-      channel: 'chrome',
-      headless: true,
-      args: ['--disable-blink-features=AutomationControlled'],
-    })
+    // Which browser to launch depends on where this is running, and the two cases need
+    // different answers.
+    //
+    //   A development machine has Google Chrome installed, so `channel: 'chrome'`
+    //   finds it and pages render exactly as a person would see them.
+    //
+    //   The container has Alpine's chromium and no Chrome, so that channel is absent
+    //   and the launch fails. Alpine's build is a real Chromium, so pointing at it
+    //   works; it just has to be named, because Playwright looks for its own bundled
+    //   build by default and would not find this one.
+    //
+    // `VMA_CHROMIUM_PATH` is how the container says where its binary is. Without it the
+    // launch is attempted by channel, which is right on a workstation and fails loudly
+    // in a container, which is what the warning reports.
+    const executablePath = process.env.VMA_CHROMIUM_PATH?.trim() || undefined
+    const launchArgs = [
+      '--disable-blink-features=AutomationControlled',
+      // Chrome refuses to start as root without this, and a container runs as root
+      // unless the image says otherwise. Harmless where it is not needed.
+      '--no-sandbox',
+    ]
+
+    browser = await chromium.launch(
+      executablePath
+        ? { executablePath, headless: true, args: launchArgs }
+        : { channel: 'chrome', headless: true, args: launchArgs }
+    )
 
     for (const engine of engines) {
       if (Date.now() >= deadline) {
