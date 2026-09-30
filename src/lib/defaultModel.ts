@@ -27,40 +27,52 @@ export interface DefaultModelChoice {
 /**
  * Picks the default model for a new agent.
  *
- * The preferred model wins when that provider is configured. Otherwise the first
- * provider with a key is used, so a deployment that never added DeepSeek still gets a
- * working agent rather than a dangling reference. Falls back to the first provider at
- * all, which is what the old code did unconditionally.
+ * The preferred model is found by **model id**, not by provider id, and that distinction was
+ * learned from a real deployment. A DeepSeek provider is usually added by hand, so it carries
+ * a generated id like `provider-1789053885439-esckrh9` rather than the preset `deepseek`, and
+ * its model list may put `deepseek-chat` first. Matching on the provider id alone therefore
+ * missed a provider that had `deepseek-flash` sitting right there, and the agent silently got
+ * a different model than the one asked for.
+ *
+ * The order below is: the preferred model wherever it lives, then the preferred provider
+ * under another model, then any configured provider, then the preferred name as a last
+ * resort so a fresh install and an established one agree.
  */
 export function pickDefaultModel(providers: ProviderConfig[]): DefaultModelChoice {
   const withKey = providers.filter(providerHasKey)
 
-  const preferred = withKey.find(
-    (provider) =>
-      provider.id === PREFERRED_DEFAULT_MODEL.provider &&
-      provider.models.some((model) => model.id === PREFERRED_DEFAULT_MODEL.modelName)
+  // 1. A configured provider that carries the preferred model. Matched by model id, so a
+  //    hand-added provider entry is found even though its id is generated.
+  const carriesPreferred = withKey.find((provider) =>
+    provider.models.some((model) => model.id === PREFERRED_DEFAULT_MODEL.modelName)
   )
-  if (preferred) return { ...PREFERRED_DEFAULT_MODEL }
+  if (carriesPreferred) {
+    return { provider: carriesPreferred.id, modelName: PREFERRED_DEFAULT_MODEL.modelName }
+  }
 
-  // The preferred name is a suggestion, not a requirement: a provider that carries it
-  // but under a different id is still a better answer than an unrelated provider.
+  // 2. The preferred provider itself, whether that is its id or its display name, using its
+  //    first model. Reached when the headline model has been renamed or removed.
   const preferredProvider = withKey.find(
-    (provider) => provider.id === PREFERRED_DEFAULT_MODEL.provider
+    (provider) =>
+      provider.id === PREFERRED_DEFAULT_MODEL.provider ||
+      provider.name.trim().toLowerCase() === PREFERRED_DEFAULT_MODEL.provider
   )
   if (preferredProvider?.models[0]) {
     return { provider: preferredProvider.id, modelName: preferredProvider.models[0].id }
   }
 
+  // 3. Any configured provider, so a deployment that never added DeepSeek still gets a working
+  //    agent rather than a dangling reference.
   const anyConfigured = withKey.find((provider) => provider.models[0])
   if (anyConfigured) {
     return { provider: anyConfigured.id, modelName: anyConfigured.models[0].id }
   }
 
-  // Nothing is configured at all. The preferred model is returned rather than the first
-  // provider in the list, so a new agent matches the built-in agents instead of
-  // disagreeing with them: they are hardcoded to DeepSeek, and having the three agents
-  // you start with on one provider and every agent you create on another is the kind of
-  // inconsistency that reads as a bug. Nothing works until a key is added anyway, and the
-  // settings screen is where that happens.
+  // 4. Nothing is configured at all. The preferred model is returned rather than the first
+  //    provider in the list, so a new agent matches the built-in agents instead of
+  //    disagreeing with them: they are hardcoded to DeepSeek, and having the three agents
+  //    you start with on one provider and every agent you create on another is the kind of
+  //    inconsistency that reads as a bug. Nothing works until a key is added anyway, and the
+  //    settings screen is where that happens.
   return { ...PREFERRED_DEFAULT_MODEL }
 }

@@ -102,7 +102,21 @@ tetap membuat agen baru di `gpt-4o` lalu gagal di putaran pertama. Sekarang semu
 memanggil `pickDefaultModel`, yang didahulukan DeepSeek.
 
 - **Agen bawaan**: Maya, Aldo, dan Sinta kini di `deepseek/deepseek-flash`
-- **Diuji**: `defaultModel.test.ts` (10 tes), `fileQuestion.test.ts` (7 tes), dan pemeriksaan browser nyata di `scripts/e2e-ui.mjs`
+- **Diuji**: `defaultModel.test.ts` (13 tes), `fileQuestion.test.ts` (7 tes), dan pemeriksaan browser nyata di `scripts/e2e-ui.mjs`
+
+#### Kenapa pencocokan modelnya diperbaiki setelah deploy pertama
+
+Deploy pertama ke produksi mengungkap kekurangan yang tidak terlihat di mesin uji. Provider
+DeepSeek di server itu **ditambahkan manual**, jadi id-nya hasil generate
+(`provider-1789053885439-esckrh9`), bukan `deepseek` seperti preset. Waktu penyaringannya
+hanya mencocokkan **id provider**, provider itu tidak ketemu, dan agen baru jatuh ke model
+**pertama** di daftarnya, yaitu `deepseek-chat`. Padahal `deepseek-flash` ada di daftar yang
+sama, cuma di urutan ketiga.
+
+Sekarang `pickDefaultModel` mencocokkan **id model** lebih dulu, bukan id provider. Provider
+yang punya `deepseek-flash` akan ketemu walau id-nya hasil generate. Urutannya: model yang
+diminta di mana pun ia berada, lalu provider DeepSeek dengan model lain, lalu provider
+ber-kunci mana saja, terakhir nama yang diminta supaya instalasi baru dan lama sepakat.
 
 #### Catatan pengujian
 

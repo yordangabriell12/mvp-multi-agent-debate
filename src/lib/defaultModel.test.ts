@@ -52,6 +52,43 @@ describe('pickDefaultModel', () => {
     expect(pickDefaultModel(providers).provider).toBe('deepseek')
   })
 
+  /**
+   * The case a real deployment exposed: a DeepSeek provider added by hand carries a generated
+   * id and may list `deepseek-chat` first. Matching on the provider id alone missed it and the
+   * new agent silently got `deepseek-chat` instead of the flash model.
+   */
+  it('finds the preferred model on a hand-added provider with a generated id', () => {
+    const providers = [
+      provider('openai', ['gpt-4o'], { hasKey: true }),
+      provider('provider-1789053885439-esckrh9', ['deepseek-chat', 'deepseek-reasoner', 'deepseek-flash', 'deepseek-v4-pro'], { hasKey: true }),
+    ]
+
+    // Named after the deployment's provider, so the intent is readable.
+    const actual = pickDefaultModel(providers)
+    expect(actual.modelName).toBe('deepseek-flash')
+    expect(actual.provider).toBe('provider-1789053885439-esckrh9')
+  })
+
+  it('matches the preferred provider by display name when the id is generated', () => {
+    const providers = [
+      provider('openai', ['gpt-4o'], { hasKey: true }),
+      provider('provider-999', ['deepseek-chat', 'deepseek-reasoner'], { hasKey: true }),
+    ]
+    // No flash model, but this is still the DeepSeek provider, so its first model wins over
+    // jumping to OpenAI.
+    providers[1].name = 'DeepSeek'
+    expect(pickDefaultModel(providers)).toEqual({ provider: 'provider-999', modelName: 'deepseek-chat' })
+  })
+
+  it('prefers the model over the provider when they disagree', () => {
+    const providers = [
+      provider('openrouter', ['deepseek-flash'], { hasKey: true }),
+      provider('deepseek', ['deepseek-chat'], { hasKey: true }),
+    ]
+    // The model is what was asked for, so the provider serving it wins.
+    expect(pickDefaultModel(providers)).toEqual({ provider: 'openrouter', modelName: 'deepseek-flash' })
+  })
+
   it('accepts a client copy where only hasKey is set', () => {
     const providers: ProviderConfig[] = [
       {
