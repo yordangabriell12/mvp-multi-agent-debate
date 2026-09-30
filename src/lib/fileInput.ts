@@ -11,6 +11,8 @@
 // the text saved is the text of the document rather than its bytes.
 
 import { isReadableByOcr, readFileWithOcr } from '@/lib/ocrClient'
+import { buildFilePreview } from '@/lib/filePreview'
+import type { ReadMethod } from '@/types/message'
 
 /** Extensions that are plain text and can be read directly. */
 const TEXT_EXTENSIONS = [
@@ -39,6 +41,18 @@ export interface ExtractedFile {
   viaOcr?: boolean
   /** Anything worth telling the user, such as an unreadable page. */
   warning?: string
+  /** A downscaled preview, so the conversation can show what was attached. */
+  thumbnail?: string | null
+  /** Pixels of the original image, shown beside the preview. */
+  width?: number
+  height?: number
+  /**
+   * How the text was obtained, for the label beside the file.
+   *
+   * Reported from here rather than inferred by the caller, which would otherwise have
+   * to know that `viaOcr` being unset means "text file" and not "unknown".
+   */
+  method?: ReadMethod
 }
 
 function isTextFile(file: File): boolean {
@@ -70,8 +84,13 @@ function readAsText(file: File): Promise<string> {
  * than an answer built on noise.
  */
 export async function extractFileText(file: File): Promise<ExtractedFile> {
+  // Built before anything else, and independently of how the text is read, because a
+  // preview is what tells the reader what they attached. A file whose text cannot be
+  // read is exactly the case where seeing it matters most.
+  const preview = await buildFilePreview(file)
+
   if (isTextFile(file)) {
-    return { text: await readAsText(file) }
+    return { text: await readAsText(file), method: 'text', ...preview }
   }
 
   if (isReadableByOcr(file)) {
@@ -91,7 +110,13 @@ export async function extractFileText(file: File): Promise<ExtractedFile> {
       throw new Error('No text was found in that file.')
     }
 
-    return { text: outcome.text, viaOcr: outcome.method !== 'pdf-text', warning: outcome.warning }
+    return {
+      text: outcome.text,
+      viaOcr: outcome.method !== 'pdf-text',
+      warning: outcome.warning,
+      method: outcome.method,
+      ...preview,
+    }
   }
 
   throw new Error(

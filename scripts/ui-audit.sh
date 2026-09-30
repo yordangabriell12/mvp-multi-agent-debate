@@ -173,7 +173,7 @@ echo "== 4. The workspace renders =="
 # this check report missing buttons that were present. The tree is complete, and
 # it is also the thing the tool acts on.
 SHELL_TEXT=$(mcp snapshot "{\"page\":$PAGE}")
-for needle in "New session" "Sign out" "Deep Search" "Ask the room"; do
+for needle in "New session" "Sign out" "Search Mode" "Ask the room"; do
   if has "$SHELL_TEXT" "$needle"; then
     ok "the workspace shows \"$needle\""
   else
@@ -182,29 +182,29 @@ for needle in "New session" "Sign out" "Deep Search" "Ask the room"; do
 done
 
 echo
-echo "== 5. Deep Search toggles, repeatedly =="
+echo "== 5. Search Mode toggles, repeatedly =="
 # The behaviour asked for: flipping it must be harmless and must end in the state
 # last chosen.
 toggle_deep_search() {
   local snap ref
   snap=$(mcp snapshot "{\"page\":$PAGE}")
-  ref=$(printf '%s' "$snap" | grep 'button "Deep Search' | grep -oE '\[ref=e[0-9]+\]' | grep -oE 'e[0-9]+' | head -1)
+  ref=$(printf '%s' "$snap" | grep 'button "Search Mode' | grep -oE '\[ref=e[0-9]+\]' | grep -oE 'e[0-9]+' | head -1)
   [ -z "$ref" ] && return
   mcp act "{\"page\":$PAGE,\"kind\":\"click\",\"ref\":\"$ref\"}" > /dev/null
   sleep 1
 }
 
-STATE=$(mcp snapshot "{\"page\":$PAGE}" | grep -oE 'button "Deep Search (on|off)"' | head -1)
+STATE=$(mcp snapshot "{\"page\":$PAGE}" | grep -oE 'button "Search Mode (on|off)"' | head -1)
 if [ -z "$STATE" ]; then
-  bad "the Deep Search toggle exists"
+  bad "the Search Mode toggle exists"
 else
-  ok "the Deep Search toggle exists" "$STATE"
+  ok "the Search Mode toggle exists" "$STATE"
 
   # Four flips, ending where it started. Anything leaking between turns would show
   # up as a drifting label.
   START_STATE="$STATE"
   for _ in 1 2 3 4; do toggle_deep_search; done
-  END_STATE=$(mcp snapshot "{\"page\":$PAGE}" | grep -oE 'button "Deep Search (on|off)"' | head -1)
+  END_STATE=$(mcp snapshot "{\"page\":$PAGE}" | grep -oE 'button "Search Mode (on|off)"' | head -1)
 
   if [ "$END_STATE" = "$START_STATE" ]; then
     ok "four flips return it to where it started" "$START_STATE"

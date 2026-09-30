@@ -2,10 +2,11 @@
 //
 // Two things happen per agent turn, in this order:
 //
-//   1. The agent proposes its own search queries. It is asked in its own voice,
-//      with its own role and the question, so a finance agent looks for unit
-//      economics while a legal agent looks for the regulation. That is the whole
-//      point: one shared search would hand every agent the same answer.
+//   1. The agent proposes its own search queries. It is asked in its own voice, with
+//      its own role, the question, and the queries other agents have already run, so a
+//      finance agent looks for unit economics while a legal agent looks for the
+//      regulation. That is the whole point: one shared search would hand every agent the
+//      same answer.
 //   2. The queries are run, and the results are returned as a block of text the
 //      agent then sees in its context.
 //
@@ -14,6 +15,8 @@
 // through a conversation changes the next turn and nothing else. Turning it off
 // does not remove anything already gathered: those results live in the
 // conversation as ordinary messages.
+
+import { distinctQueries } from '@/lib/queryDedupe'
 
 export interface ResearchResult {
   /** The queries that were run, in order. */
@@ -78,6 +81,13 @@ export interface PlannerTarget {
  * One small call with a low token ceiling: a planning step, not an answer. The
  * model is the one the agent already uses, so this needs no extra configuration.
  *
+ * `avoid` is what keeps two agents in a room from searching the same thing. Without it
+ * every agent plans from the same question and reaches for the same phrasing, so the room
+ * pays for three searches and reads one result set three times. The instruction asks for a
+ * different angle; `distinctQueries` enforces it, because a model can ignore an
+ * instruction and the result of ignoring it is invisible until the answers turn out
+ * identical.
+ *
  * A chatty reply is tolerated rather than fatal: lines are stripped of numbering
  * and bullets, and anything still prose-like is dropped by the length bound. The
  * worst case is a poor query, not a broken turn.
@@ -86,7 +96,8 @@ export async function proposeQueries(
   role: string,
   question: string,
   maxQueries: number,
-  target: PlannerTarget
+  target: PlannerTarget,
+  avoid: readonly string[] = []
 ): Promise<string[]> {
   const instruction = [
     'You decide what to look up before answering a question.',
@@ -94,8 +105,16 @@ export async function proposeQueries(
     `At most ${maxQueries} queries.`,
     'Write each one the way someone would type it into a search engine: short and specific.',
     'Use the language the question is written in.',
+    'Another participant may have already searched; you will be told what they used. Never repeat one of those queries, and do not merely reword one: find a different angle, a different source, or a different part of the question.',
     'If looking something up would not help, reply with exactly: NONE',
   ].join(' ')
+
+  // Named explicitly in the prompt rather than counted, so the model can see which words to
+  // move away from instead of guessing.
+  const alreadySearched = avoid.length > 0
+    ? DNL + 'ALREADY SEARCHED BY OTHERS (do not repeat, and do not reword):' + NL +
+      avoid.map((query) => '- ' + query).join(NL) + NL
+    : ''
 
   try {
     const res = await fetch('/api/chat', {
@@ -105,7 +124,7 @@ export async function proposeQueries(
         messages: [
           {
             role: 'user',
-            content: 'YOUR ROLE: ' + role + DNL + 'QUESTION: ' + question.slice(0, 1200),
+            content: 'YOUR ROLE: ' + role + DNL + 'QUESTION: ' + question.slice(0, 1200) + alreadySearched,
           },
         ],
         agent: {
@@ -131,7 +150,9 @@ export async function proposeQueries(
     // judged to be general knowledge would spend a call and add nothing.
     if (lines.some((line) => /^NONE\b/i.test(line))) return []
 
-    return lines.slice(0, maxQueries)
+    // Enforced here and not only in the prompt: a query that duplicates another agent's is
+    // dropped, and a planner that repeats itself costs one search rather than two.
+    return distinctQueries(lines, avoid).slice(0, maxQueries)
   } catch {
     // A planner that fails means no research, not a broken turn.
     return []

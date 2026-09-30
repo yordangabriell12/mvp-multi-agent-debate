@@ -4,6 +4,8 @@
 // admin's OCR settings. So this sends a file and reports what came back, which
 // keeps the client honest about the one thing it cannot decide.
 
+import type { ReadMethod } from '@/types/message'
+
 export interface OcrPageResult {
   page: number
   text: string
@@ -16,7 +18,13 @@ export interface OcrOutcome {
   text?: string
   pages?: OcrPageResult[]
   /** 'pdf-text' | 'pdf-vision' | 'image-vision' */
-  method?: string
+  /**
+   * Which route produced the text: a PDF's own text layer, or a model reading an image.
+   *
+   * Narrowed to the known values rather than left as `string`, so a caller that labels
+   * the file has to handle every case the server can actually return.
+   */
+  method?: ReadMethod
   /** Set when the deployment has no vision model chosen yet. */
   notConfigured?: boolean
   /** Warnings worth showing: skipped pages, unreadable pages, a page limit hit. */

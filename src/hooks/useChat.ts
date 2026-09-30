@@ -5,10 +5,13 @@ import { useChatStore } from '@/store/chatStore'
 import { useSessionStore } from '@/store/sessionStore'
 import { useDocumentStore } from '@/store/documentStore'
 import { usePendingStore } from '@/store/pendingStore'
-import type { Message } from '@/types/message'
+import type { Message, MessageAttachment } from '@/types/message'
 import { extractAgentTags, findAgentsInMessage, parseDecision, resolveRoundCap } from '@/lib/debate'
 import { proposeQueries, researchFor } from '@/lib/deepSearch'
 import { selectAgentsForQuestion } from '@/lib/routing'
+import { pickDefaultModel } from '@/lib/defaultModel'
+import { userQuestion } from '@/lib/fileQuestion'
+import { createLock } from '@/lib/lock'
 import { QUALITY_RULES } from '@/lib/prompts'
 
 const MODE_PREFIXES: Record<string, string> = {
@@ -95,17 +98,29 @@ export function useChat(sessionId: string) {
   // reused for every agent that has web search enabled.
   const webSearchRef = useRef('')
   /**
-   * Deep search research, keyed by agent.
+   * Research per agent: the block to inject and the queries that produced it.
    *
    * Per agent rather than one shared block, because the point of the feature is
    * that each agent looks up what its own role needs. Cleared at the start of
    * every send so a new question never inherits the previous question's findings.
    *
+   * The queries are kept next to the block because they are what the next agent's planner
+   * is told to avoid. Without them a second agent plans blind and picks the same words.
+   *
    * The toggle itself is deliberately not held here. It is read from the session
    * at the moment each agent runs (see deepSearchFor), so switching it on or off
    * takes effect on the next agent and never leaves a half-configured run.
    */
-  const researchRef = useRef<Record<string, string>>({})
+  const researchRef = useRef<Record<string, { block: string; queries: string[] }>>({})
+  /**
+   * Serialises the planning stage, so each agent sees what the previous one chose.
+   *
+   * Starting all planners together is what made every agent search the same thing: each
+   * one saw an empty list of prior queries and reached for the most obvious phrasing. The
+   * planning call is short and the searches themselves stay parallel, so the cost of
+   * ordering it is small next to what it prevents.
+   */
+  const searchLock = useRef(createLock())
   const agents = useAgentStore((s) => s.agents)
   const providers = useSettingsStore((s) => s.providers)
   const addMessage = useChatStore((s) => s.addMessage)
@@ -116,7 +131,10 @@ export function useChat(sessionId: string) {
   const buildRagContext = useCallback((agentId: string): string => {
     const agentDocs = documents.filter((d) => d.agentId === agentId)
     const generalDocs = documents.filter((d) => !d.agentId)
-    const all = [...agentDocs, ...generalDocs]
+    // Only documents with text are offered as reference material. A file whose text could
+    // not be read is kept so the reader can see it, and an empty section would tell the
+    // agents a document exists and then say nothing about its contents.
+    const all = [...agentDocs, ...generalDocs].filter((d) => d.content.trim().length > 0)
     if (all.length === 0) return ''
     const sections = all.map((d) => '--- ' + d.name + ' ---' + NL + (d.content.length > 3000 ? d.content.slice(0, 3000) + '...' : d.content))
     return DNL + 'REFERENCE DOCUMENTS:' + NL + sections.join(DNL)
@@ -257,6 +275,20 @@ export function useChat(sessionId: string) {
   }, [agents, session])
 
   /**
+   * Every query any agent has claimed so far, for this question.
+   *
+   * Read inside the search lock, never outside it. Outside, a second agent would read a list
+   * that does not yet contain what the first is about to claim, which is the bug that made
+   * two of three agents search the same words: the third agent started its planning before
+   * the second had recorded anything, so both saw only the first agent's queries.
+   */
+  const claimedQueries = useCallback((): string[] => {
+    return Object.values(researchRef.current)
+      .flatMap((entry) => entry.queries)
+      .filter(Boolean)
+  }, [])
+
+  /**
    * Researches for one agent, if this session has deep search on right now.
    *
    * The toggle is read here, at the moment the agent is about to run, rather than
@@ -269,8 +301,10 @@ export function useChat(sessionId: string) {
    */
   const deepSearchFor = useCallback(
     async (agentId: string, question: string): Promise<string> => {
-      const cached = researchRef.current[agentId]
-      if (cached) return cached
+      // Presence of the key, not the truthiness of the block. An agent that found nothing
+      // still searched, and re-planning for it would spend another call and hand it the
+      // same answer.
+      if (agentId in researchRef.current) return researchRef.current[agentId].block
 
       // Read live, not from a snapshot taken when the send began.
       const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
@@ -279,22 +313,56 @@ export function useChat(sessionId: string) {
       const agent = agents.find((a) => a.id === agentId)
       if (!agent?.model.provider || !agent.model.modelName) return ''
 
-      // The agent decides what to look up, in its own voice. One small call.
-      const queries = await proposeQueries(
-        agent.roleTitle + ' (' + agent.name + '): ' + agent.systemPrompt.slice(0, 300),
-        question,
-        current.settings.deepSearchMaxQueries ?? 2,
-        { provider: agent.model.provider, modelName: agent.model.modelName }
-      )
-      if (queries.length === 0) return ''
+      // The planning stage takes a ticket. Agents run their answers in parallel, so without
+      // this two planners would start together, each seeing an empty list of what the other
+      // chose, and both would reach for the same obvious phrasing. Only this part is
+      // serialised; the searches and the answers that follow stay parallel, so the turn is
+      // not slowed down by more than the planning calls themselves.
+      const release = await searchLock.current.acquire()
+
+      let queries: string[] = []
+      try {
+        // Read inside the ticket, not before asking for it. Whatever a previous agent
+        // claimed is visible here, and that list is the whole point of taking the ticket.
+        queries = await proposeQueries(
+          agent.roleTitle + ' (' + agent.name + '): ' + agent.systemPrompt.slice(0, 300),
+          question,
+          current.settings.deepSearchMaxQueries ?? 2,
+          { provider: agent.model.provider, modelName: agent.model.modelName },
+          claimedQueries()
+        )
+
+        // Claimed before the ticket is given up, not after the search finishes. Reserving
+        // the words here is what makes the next agent avoid them: the entry has to be in the
+        // shared list by the time the next planner reads it, and the search that follows can
+        // take seconds. Claiming afterwards left the third agent seeing only the first
+        // agent's queries, which is how two agents still ended up on the same keywords.
+        researchRef.current[agentId] = { block: '', queries }
+      } finally {
+        release()
+      }
+
+      if (queries.length === 0) {
+        // With every angle taken, an agent can come back empty. That is a real answer rather
+        // than a failure, and it is worth saying: otherwise the missing search looks like a
+        // broken turn. The empty entry was claimed above, so this agent does not plan again.
+        addMessage(sessionId, {
+          role: 'search',
+          content: agent.name + ' tidak mencari: tidak ada kata kunci baru yang tersisa, dan mengulang yang sudah ada hanya akan memberi hasil yang sama.',
+          sessionId,
+          metadata: { searchQuery: '', searchSource: 'search mode' },
+        })
+        return ''
+      }
 
       // A visible trace of what was looked up, so the research in the answer can
-      // be told apart from the model's own knowledge.
+      // be told apart from the model's own knowledge, and the reader can see the
+      // three agents are not searching the same thing.
       addMessage(sessionId, {
         role: 'search',
         content: agent.name + ' mencari: ' + queries.join(' | '),
         sessionId,
-        metadata: { searchQuery: queries.join(' | '), searchSource: 'deep search' },
+        metadata: { searchQuery: queries.join(' | '), searchSource: 'search mode' },
       })
 
       if (stoppedRef.current) return ''
@@ -324,7 +392,9 @@ export function useChat(sessionId: string) {
         })
       }
 
-      researchRef.current[agentId] = research.block
+      // The block is filled in now that the search has finished. The queries were already
+      // claimed before the ticket was released, so they are not written again here.
+      researchRef.current[agentId] = { block: research.block, queries }
       return research.block
     },
     [agents, sessionId, addMessage]
@@ -423,8 +493,12 @@ export function useChat(sessionId: string) {
   // ==========================================
   // MAIN SEND: normal + moderator
   // ==========================================
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (typed: string, attachments: MessageAttachment[] = []) => {
     if (!session) return
+    // One question drives everything below: the message stored, the agents routed, the
+    // search run, and the prompt each agent sees. Deriving it once is what keeps a
+    // file-only upload from reaching the agents as an empty question.
+    const content = userQuestion(typed, attachments)
 
     // If the moderator is waiting for the user's answer, route this message
     // to resume the discussion instead of starting a new one.
@@ -440,7 +514,7 @@ export function useChat(sessionId: string) {
     stoppedRef.current = false
     abortRef.current = []
     updateSession(session.id, { status: 'running', currentRound: 1 })
-    addMessage(sessionId, { role: 'user', content, sessionId })
+    addMessage(sessionId, { role: 'user', content, sessionId, ...(attachments.length > 0 ? { metadata: { attachments } } : {}) })
 
     const agentsMap: Record<string, string> = {}
     agents.forEach((a) => { agentsMap[a.id] = a.name })
@@ -453,9 +527,13 @@ export function useChat(sessionId: string) {
       // Moderator uses dedicated provider if configured, otherwise first available
       const moderatorProviderId = useSettingsStore.getState().moderatorProviderId
       const moderatorModelId = useSettingsStore.getState().moderatorModelId
+      // "Auto" means the account has not chosen one. The shared helper answers it, so a
+      // deployment on DeepSeek moderates with DeepSeek rather than with whichever
+      // provider happens to sit first in the list.
+      const preferred = pickDefaultModel(providers)
       const modProvider = moderatorProviderId
         ? providers.find((p) => p.id === moderatorProviderId && p.hasKey)
-        : providers.find((p) => p.hasKey)
+        : providers.find((p) => p.id === preferred.provider && p.hasKey) || providers.find((p) => p.hasKey)
       if (!modProvider) {
         addMessage(sessionId, { role: 'system', content: 'No API key configured for moderator.', sessionId })
         updateSession(session.id, { status: 'idle' })

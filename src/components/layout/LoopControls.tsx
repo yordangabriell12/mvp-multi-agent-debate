@@ -48,7 +48,7 @@ export function LoopControls({ sessionId, loading, loopRound = 0, onStop }: Loop
         type="button"
         onClick={() => setSettings(session.id, { deepSearch: !deepSearch })}
         aria-pressed={deepSearch}
-        title="Setiap agen mencari sendiri di web sebelum menjawab"
+        title="Setiap agen mencari sendiri di web sebelum menjawab, dengan kata kunci yang berbeda supaya hasilnya tidak tumpang tindih"
         className={cn(
           'flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors',
           deepSearch
@@ -60,7 +60,7 @@ export function LoopControls({ sessionId, loading, loopRound = 0, onStop }: Loop
           <circle cx="5.2" cy="5.2" r="3.4" stroke="currentColor" strokeWidth="1.3" />
           <path d="M7.8 7.8L10.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
         </svg>
-        Deep Search {deepSearch ? 'on' : 'off'}
+        Search Mode {deepSearch ? 'on' : 'off'}
       </button>
 
       <div className="ml-auto flex items-center gap-1">

@@ -19,6 +19,108 @@ updated: 2026-09-10
 
 ---
 
+## 2026-09-30
+
+### 🔎 Search Mode: tiap agen mencari kata kunci yang berbeda
+
+Sebelumnya, waktu Search Mode menyala dan pertanyaannya `cari tahu apa itu dewave @all`,
+**ketiga agen mencari hal yang sama**. Hasilnya tiga set tautan identik, biaya tiga kali
+pencarian, dan jawaban yang tumpang tindih sehingga tidak ada yang bisa diperdebatkan.
+
+Penyebabnya bukan modelnya, tapi urutannya. Ketiga agen dijalankan **bersamaan**, dan tiap
+perencana hanya tahu peran + pertanyaan, dan tidak tahu apa yang sudah dicari agen lain. Jadi
+wajar semuanya meraih frasa yang paling jelas.
+
+| Yang diperbaiki | Sebelumnya | Sekarang |
+| --- | --- | --- |
+| **Tahap perencanaan** | Ketiga perencana jalan bersamaan, tiap agen buta terhadap pilihan agen lain | Diberi antrean: perencana kedua melihat pilihan pertama, ketiga melihat keduanya. Pencarian dan jawabannya tetap paralel, jadi tidak melambat |
+| **Perencana** | Tidak diberi tahu apa pun | Diberi daftar `ALREADY SEARCHED BY OTHERS` dan dilarang mengulang **atau** mengganti kata |
+| **Pengulangan** | Dijalankan dua kali | Dicek di kode, bukan hanya dipercaya ke model |
+| **Kata kunci** | 3 agen × frasa yang sama | 3 agen × sudut berbeda |
+| **Label di UI** | `Deep Search` | `Search Mode` |
+
+Contoh nyata dari satu pertanyaan, `cari tahu apa itu dewave @all`:
+
+```
+Maya  : dewave fitur lengkap  | dewave harga langganan
+Aldo  : dewave kompetitor     | dewave ulasan pengguna
+Sinta : dewave keamanan data  | dewave cara daftar
+```
+
+#### Kenapa diperiksa di kode, bukan cuma diminta di prompt
+
+Model bisa mengabaikan instruksi, dan akibatnya tidak kelihatan sampai jawabannya ternyata
+kembar. Jadi ada dua lapis: perencana diminta memilih sudut lain, lalu hasilnya disaring
+`distinctQueries`. Penyaringan itu menyamakan **urutan kata**, jadi `tarif PPh badan 2024`
+dan `2024 tarif PPh badan` dianggap satu pencarian. Batasnya dua kata: satu kata yang sama
+("pajak") tidak cukup untuk bilang dua query itu sama.
+
+Kalau semua sudut sudah terpakai, agen **tidak mencari** dan mengatakannya. Itu jawaban
+yang jujur; mengulang pencarian yang sama hanya memberi hasil yang sama.
+
+#### Kenapa ada antrean, bukan cuma daftar
+
+Membaca daftar di luar antrean tidak menyelesaikan masalahnya: agen ketiga membaca daftar
+**sebelum** agen kedua mencatat pilihannya, jadi keduanya tetap sama. Ini ketahuan dari uji
+nyata, bukan dari teori: dua agen pertama berbeda, dua agen terakhir kembar. Kuncinya
+`searchLock`, dan kata kunci **diklaim sebelum antrean dilepas**, bukan setelah pencarian
+selesai (pencarian bisa makan beberapa detik).
+
+- **Diuji**: `lock.test.ts` (6), `queryDedupe.test.ts` (18), `deepSearch.test.ts` (24),
+  plus `scripts/mock-chat-provider.mjs` yang menjalankan skenario tiga agen sungguhan
+  lewat browser, dalam dua mode: model yang menuruti instruksi dan model yang membangkang
+
+### 📎 Berkas yang diunggah kini terlihat di percakapan
+
+Berkas yang dikirim lewat komposer **tidak pernah muncul di chat**. Berkasnya masuk ke
+document store dan dipakai agen sebagai konteks, tetapi tidak ada satu pun pesan yang
+dibuat untuknya, jadi yang mengirim tidak bisa tahu berkasnya diterima, dan pertanyaan
+lanjutan seperti "PDF yang tadi itu" tidak punya apa pun untuk ditunjuk.
+
+| Yang diperbaiki | Sebelumnya | Sekarang |
+| --- | --- | --- |
+| **Berkas di percakapan** | Tidak ada. Hanya tersimpan untuk konteks agen | Kartu lampiran muncul di chat: thumbnail untuk gambar, pratinjau bergaris untuk PDF, plus nama, ukuran, dan jumlah teks yang bisa dibaca agen |
+| **Berkas tanpa teks** | Composer menolak kirim | Berkas saja sudah cukup; pertanyaannya disusun dari nama berkas |
+| **Pesan ke agen** | `USER ASKS: ""` ketika hanya ada berkas | `Review the attached file: <nama>. Say what it contains...` |
+| **Pratinjau gambar** | Tidak ada | Thumbnail maksimal 320 px (data URL), bukan berkas aslinya, agar localStorage tidak penuh |
+| **Model default** | `openai/gpt-4o` dan `anthropic/claude-...` untuk tiga agen bawaan, `provider[0]` untuk agen baru | `deepseek/deepseek-flash` di semua tempat, lewat satu fungsi `pickDefaultModel` |
+| **Moderator "Auto"** | Provider pertama yang punya kunci (OpenAI) | Provider kesukaan lebih dulu (DeepSeek), baru provider pertama |
+
+#### Kenapa thumbnail, bukan berkasnya
+
+Pesan disimpan di localStorage dan dikirim ke server setiap berubah. Menyimpan foto
+4 MB sebagai base64 berarti satu unggahan menjadi penulisan beberapa megabyte yang
+diulang-ulang, sementara localStorage hanya sekitar 5 MB. Thumbnail cukup untuk
+memberi tahu apa yang dilampirkan; teksnya yang dibaca agen.
+
+#### Kenapa satu fungsi untuk model default
+
+Empat tempat berbeda memilih model default sendiri-sendiri: agen bawaan, dialog agen
+baru, auto-heal di layar AI Models, dan cascade saat provider dihapus. Semuanya memakai
+aturan "provider pertama", dan karena OpenAI ada di urutan pertama, deployment DeepSeek
+tetap membuat agen baru di `gpt-4o` lalu gagal di putaran pertama. Sekarang semuanya
+memanggil `pickDefaultModel`, yang didahulukan DeepSeek.
+
+- **Agen bawaan**: Maya, Aldo, dan Sinta kini di `deepseek/deepseek-flash`
+- **Diuji**: `defaultModel.test.ts` (10 tes), `fileQuestion.test.ts` (7 tes), dan pemeriksaan browser nyata di `scripts/e2e-ui.mjs`
+
+#### Catatan pengujian
+
+`scripts/e2e-ui.mjs` juga diperbaiki di dua tempat yang **bukan** terkait perubahan ini,
+karena keduanya membuat kegagalan palsu: pencarian teks tidak bisa melihat placeholder
+komposer, dan pemeriksaan "Daftar akun" memakai judul yang tidak pernah ada di halaman
+(judul aslinya "Kelola akun"). Endpoint debug browser sekarang dicoba di IPv4 lalu IPv6,
+karena Chrome di mesin ini hanya mendengarkan `[::1]` dan itu tampak persis seperti
+browser tidak berjalan.
+
+Satu keterbatasan yang belum terpecahkan dan sengaja dicatat, bukan disembunyikan:
+pemeriksaan tombol Escape pada dialog masih gagal di browser headless, karena event
+`keydown` sintetis tidak sampai ke listener. `Modal.tsx` sendiri sudah memasang listener
+`keydown` untuk Escape dan overlay-nya juga bisa ditutup dengan klik di luar, jadi
+kegagalan ini berarti **belum terverifikasi**, bukan berarti pintasannya rusak.
+
+---
+
 ## 2026-09-29
 
 ### 📄 Membaca PDF dan gambar kini benar-benar bisa dinyalakan

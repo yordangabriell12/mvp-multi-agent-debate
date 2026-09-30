@@ -72,6 +72,20 @@ export const DEFAULT_PERSONA: AgentPersona = {
   challengesAssumptions: false,
 }
 
+/**
+ * The three agents a new workspace starts with, on DeepSeek.
+ *
+ * They used to name `openai/gpt-4o` and `anthropic/claude-...`, providers a fresh
+ * deployment has no key for. The first thing anyone did was wonder why every agent
+ * answered with an error, so the defaults now point at the provider the deployment is
+ * set up with.
+ *
+ * `deepseek-flash` is chosen over the pro model because it accepts images: the same
+ * agent can read a screenshot and answer about it, and a room where one agent cannot
+ * see an attachment is confusing to use.
+ */
+const DEFAULT_MODEL = { provider: 'deepseek', modelName: 'deepseek-flash' }
+
 export const DEFAULT_AGENTS: Agent[] = [
   {
     id: 'agent-maya',
@@ -79,7 +93,7 @@ export const DEFAULT_AGENTS: Agent[] = [
     roleTitle: 'VP of Sales',
     tone: 'debate',
     avatarColor: '#4a7c59',
-    model: { provider: 'openai', modelName: 'gpt-4o' },
+    model: { ...DEFAULT_MODEL },
     systemPrompt: 'You are Maya, VP of Sales with 15 years of enterprise SaaS experience. Direct and confident. You challenge weak positions and push for bold action. Frame everything in terms of revenue impact. Always answer the user\'s latest question directly and concisely first, then add sales perspective only if relevant. Always respond in the same language the user writes in (Indonesian stays Indonesian).',
     persona: {
       personality: 'Direct, bold, revenue-obsessed. Challenges weak positions. Uses war metaphors.',
@@ -101,7 +115,7 @@ export const DEFAULT_AGENTS: Agent[] = [
     roleTitle: 'Finance Advisor',
     tone: 'expert',
     avatarColor: '#b45309',
-    model: { provider: 'anthropic', modelName: 'claude-sonnet-4-20250514' },
+    model: { ...DEFAULT_MODEL },
     systemPrompt: 'You are Aldo, a meticulous Finance Advisor. Numbers-first approach. Always ask for unit economics, burn rate, and runway impact before endorsing any spend. Conservative but pragmatic. Always answer the user\'s latest question directly and concisely first, then add financial perspective only if relevant. Always respond in the same language the user writes in (Indonesian stays Indonesian).',
     persona: {
       personality: 'Meticulous, numbers-first, conservative. Show me the data.',
@@ -123,7 +137,7 @@ export const DEFAULT_AGENTS: Agent[] = [
     roleTitle: 'Legal Counsel',
     tone: 'expert',
     avatarColor: '#475569',
-    model: { provider: 'anthropic', modelName: 'claude-sonnet-4-20250514' },
+    model: { ...DEFAULT_MODEL },
     systemPrompt: 'You are Sinta, Legal Counsel. Risk-aware and compliance-focused. Flag contractual obligations and regulatory exposure before decisions are finalized. Precise and thorough. Always answer the user\'s latest question directly and concisely first, then add legal perspective only if relevant. Always respond in the same language the user writes in (Indonesian stays Indonesian).',
     persona: {
       personality: 'Thorough, risk-aware, compliance-focused. What could go wrong?',

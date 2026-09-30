@@ -6,6 +6,7 @@ import { useModalStore } from '@/store/modalStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { providerHasKey } from '@/types/provider'
+import { pickDefaultModel } from '@/lib/defaultModel'
 import { cn } from '@/lib/utils'
 
 export function ModelsModal() {
@@ -18,14 +19,13 @@ export function ModelsModal() {
   useEffect(() => {
     if (activeModal !== 'models') return
     const providerIds = new Set(providers.map((p) => p.id))
-    const fallback = providers.find(providerHasKey) || providers[0]
-    const fallbackModel = fallback?.models[0]?.id || ''
+    const chosen = pickDefaultModel(providers)
     for (const a of agents) {
       if (!providerIds.has(a.model.provider) || !a.model.modelName) {
         updateAgent(a.id, {
           model: {
-            provider: fallback?.id || 'openai',
-            modelName: a.model.modelName && providerIds.has(a.model.provider) ? a.model.modelName : fallbackModel,
+            provider: chosen.provider,
+            modelName: a.model.modelName && providerIds.has(a.model.provider) ? a.model.modelName : chosen.modelName,
           },
         })
       }

@@ -6,7 +6,7 @@ import { useModalStore } from '@/store/modalStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { AGENT_COLORS, type AgentTone } from '@/types/agent'
-import { providerHasKey } from '@/types/provider'
+import { pickDefaultModel } from '@/lib/defaultModel'
 import { cn, getInitials } from '@/lib/utils'
 import { ImproveButton } from '@/components/common/ImproveButton'
 
@@ -22,9 +22,7 @@ export function AgentsModal() {
   const handleEdit = (a: typeof agents[0]) => { setEditId(a.id); setForm({ name: a.name, role: a.roleTitle, tone: a.tone, color: a.avatarColor, prompt: a.systemPrompt, temperature: a.model.temperature === undefined ? '' : String(a.model.temperature), webSearch: a.webSearch === true }) }
   const handleSave = () => {
     if (!form.name.trim()) return
-    // Auto-pick first provider + model
-    const firstProvider = providers.find(providerHasKey) || providers[0]
-    const firstModel = firstProvider?.models[0]
+    const chosen = pickDefaultModel(providers)
     const parsedTemperature = Number.parseFloat(form.temperature)
     const temperature = Number.isFinite(parsedTemperature)
       ? Math.min(2, Math.max(0, parsedTemperature))
@@ -36,8 +34,8 @@ export function AgentsModal() {
       avatarColor: form.color,
       systemPrompt: form.prompt,
       model: {
-        provider: firstProvider?.id || 'openai',
-        modelName: firstModel?.id || '',
+        provider: chosen.provider,
+        modelName: chosen.modelName,
         ...(temperature === undefined ? {} : { temperature }),
       },
       persona: { personality: '', communicationStyle: '', values: [], biases: '', agreeableness: 0.5, confidence: 0.7, depth: 0.7, steelmansOthers: true, admitsUncertainty: true, usesRealExamples: true, challengesAssumptions: false },
@@ -71,11 +69,11 @@ export function AgentsModal() {
         <div><label className="text-[11px] text-ink-muted block mb-1">Tone</label>
           <div className="flex gap-1">{(['debate', 'supportive', 'expert'] as const).map((t) => (<button key={t} type="button" onClick={() => setForm({ ...form, tone: t })} className={cn('px-3 py-1.5 text-xs rounded-md border capitalize', form.tone === t ? 'border-sand-700 bg-surface-hover text-ink' : 'border-border text-ink-muted')}>{t}</button>))}</div>
         </div>
-        {/* Per-agent web search. Only does anything while the session's Deep
-            Search is on, and Deep Search covers the richer case: an agent
+        {/* Per-agent web search. Only does anything while the session's Search
+            Mode is on, and Search Mode covers the richer case: an agent
             looking up its own angle rather than sharing one result set. Kept
             because an agent that previously had it on keeps the shared results,
-            and because a session with Deep Search off should not silently lose
+            and because a session with Search Mode off should not silently lose
             the setting. */}
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -83,7 +81,7 @@ export function AgentsModal() {
               Web search
             </label>
             <p className="text-[10px] text-ink-muted mt-0.5">
-              Uses the shared result set. Works only while Deep Search is on.
+              Uses the shared result set. Works only while Search Mode is on.
             </p>
           </div>
           <button

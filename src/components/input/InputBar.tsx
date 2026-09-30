@@ -5,11 +5,12 @@ import { useSessionStore } from '@/store/sessionStore'
 import { useAgentStore } from '@/store/agentStore'
 import { useDocumentStore } from '@/store/documentStore'
 import { cn, getInitials } from '@/lib/utils'
+import type { MessageAttachment } from '@/types/message'
 import { ImproveButton } from '@/components/common/ImproveButton'
 
 interface InputBarProps {
   sessionId: string
-  onSend?: (message: string) => void
+  onSend?: (message: string, attachments?: MessageAttachment[]) => void
   loading?: boolean
   onStop?: () => void
 }
@@ -22,7 +23,7 @@ export function InputBar({ sessionId, onSend, loading, onStop }: InputBarProps) 
   const [mentionFilter, setMentionFilter] = useState('')
   const [mentionIdx, setMentionIdx] = useState(0)
   const [showUpload, setShowUpload] = useState(false)
-  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; size: number }[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<MessageAttachment[]>([])
   const [uploadError, setUploadError] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
   const mRef = useRef<HTMLDivElement>(null)
@@ -63,11 +64,56 @@ export function InputBar({ sessionId, onSend, loading, onStop }: InputBarProps) 
     return () => document.removeEventListener('mousedown', h)
   }, [mentionOpen])
 
+  /**
+   * Uploads a set of files and records what each one becomes.
+   *
+   * One function for the file picker and the drop zone, because the two copies had
+   * already drifted: both had to be changed in step, and the metadata that makes the
+   * attachment visible in the conversation had to be added twice.
+   */
+  const handleFiles = async (files: FileList) => {
+    setUploadError('')
+    for (let i = 0; i < files.length; i++) {
+      const doc = await uploadFile(files[i])
+      if (!doc) {
+        setUploadError(useDocumentStore.getState().lastError || 'That file could not be read.')
+        continue
+      }
+      setUploadedFiles((previous) => [
+        ...previous,
+        {
+          name: doc.name,
+          type: doc.type,
+          size: doc.size,
+          thumbnail: doc.thumbnail,
+          width: doc.width,
+          height: doc.height,
+          method: doc.method,
+          viaOcr: doc.viaOcr,
+          warning: doc.warning,
+          textLength: doc.content.length,
+        },
+      ])
+
+      // A file that was kept but could not be read still needs saying, and it does not
+      // travel through the error path any more, so it is surfaced here. Otherwise the
+      // reader attaches a scan, sees a chip appear, and only discovers inside the
+      // conversation that its contents were never available to the agents.
+      if (doc.warning) setUploadError(doc.warning)
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const ta = taRef.current; if (!ta) return
-    const text = ta.value.trim(); if (!text) return
-    onSend?.(text)
+    const text = ta.value.trim()
+    // A file with no question is allowed: "here is the document" is a complete
+    // request, and the agents read the attachment before answering.
+    if (!text && uploadedFiles.length === 0) return
+    onSend?.(text, uploadedFiles.length > 0 ? uploadedFiles : undefined)
     ta.value = ''; ta.style.height = 'auto'
+    // Cleared here, because the attachments now belong to the message that was just
+    // sent. Keeping them would silently attach the same document to the next question.
+    setUploadedFiles([])
   }
 
   return (
@@ -135,30 +181,37 @@ export function InputBar({ sessionId, onSend, loading, onStop }: InputBarProps) 
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault()
-                const files = e.dataTransfer.files
-                setUploadError('')
-                for (let i = 0; i < files.length; i++) {
-                  const doc = await uploadFile(files[i])
-                  if (doc) setUploadedFiles((p) => [...p, { name: doc.name, size: doc.size }])
-                  else setUploadError(useDocumentStore.getState().lastError || 'That file could not be read.')
-                }
+                await handleFiles(e.dataTransfer.files)
               }}
             >
               <input ref={fileInputRef} type="file" multiple accept=".pdf,.md,.markdown,.txt,.json,.csv,.tsv,.log,.yaml,.yml,.xml,.html,.htm,.sql,.png,.jpg,.jpeg,.gif,.webp" onChange={async (e) => {
                 const files = e.target.files; if (!files) return
-                setUploadError('')
-                for (let i = 0; i < files.length; i++) {
-                  const doc = await uploadFile(files[i])
-                  if (doc) setUploadedFiles((p) => [...p, { name: doc.name, size: doc.size }])
-                  else setUploadError(useDocumentStore.getState().lastError || 'That file could not be read.')
-                }
+                await handleFiles(files)
+                // Reset so choosing the same file again still fires a change event.
+                e.target.value = ''
               }} className="hidden" aria-label="Choose files to upload" />
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="mx-auto mb-1.5 text-ink-muted" aria-hidden="true"><path d="M13 11v2.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5V11M9 2v7M6 4.5L9 1.5l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               <p className="text-xs text-ink-muted">Drop files here or click to browse</p>
               <p className="text-[10px] text-ink-muted mt-0.5">PDF, images, MD, TXT, JSON, CSV</p>
               {uploadedFiles.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1 justify-center">
-                  {uploadedFiles.map((f, i) => (<span key={i} className="text-[10px] bg-surface-inset px-2 py-0.5 rounded-full text-ink-muted">{f.name}</span>))}
+                <div className="mt-2 flex flex-wrap gap-1.5 justify-center">
+                  {uploadedFiles.map((f, i) => (
+                    <span
+                      key={i}
+                      title={f.name}
+                      className="flex items-center gap-1.5 max-w-[180px] pl-1 pr-2 py-0.5 text-[10px] bg-surface-inset rounded-full text-ink-muted"
+                    >
+                      {/* A thumbnail where there is one, so the reader recognises the
+                          file rather than reading a filename off a chip. */}
+                      {f.thumbnail ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- data URL
+                        <img src={f.thumbnail} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <span className="w-4 h-4 rounded-full bg-sand-300 shrink-0" aria-hidden="true" />
+                      )}
+                      <span className="truncate">{f.name}</span>
+                    </span>
+                  ))}
                 </div>
               )}
               {/* The failure is shown here rather than silently dropping the file.

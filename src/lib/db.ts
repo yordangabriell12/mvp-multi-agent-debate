@@ -8,6 +8,21 @@ export interface StoredDocument {
   content: string
   agentId?: string
   createdAt: number
+  /**
+   * A downscaled preview of an image, so the conversation can show what was attached.
+   *
+   * Kept here, where the document already lives, rather than only on the message: the
+   * document list and the message both need it, and rebuilding it would mean holding
+   * the original File, which is gone once the upload finishes.
+   */
+  thumbnail?: string
+  /** Pixels of the original, when it could be read. */
+  width?: number
+  height?: number
+  /** How the text was obtained, for the label beside the file. */
+  method?: 'text' | 'pdf-text' | 'pdf-vision' | 'image-vision'
+  viaOcr?: boolean
+  warning?: string
 }
 
 const DB_NAME = 'vma-documents'

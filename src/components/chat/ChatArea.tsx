@@ -12,6 +12,7 @@ import { HTMLPreview } from './HTMLPreview'
 import { BrowserView } from './BrowserView'
 import { SearchResults } from './SearchResults'
 import { PPTViewer } from './PPTViewer'
+import { FileCard } from './FileCard'
 
 const EMPTY: never[] = []
 
@@ -93,6 +94,33 @@ export function ChatArea({ sessionId, streaming }: ChatAreaProps) {
                   <div key={msg.id}>
                     {msg.content && <ChatBubble name="VMA" role="System" color="#0e7490" content={msg.content} timestamp={msg.createdAt} />}
                     <HTMLPreview html={msg.metadata.html} />
+                  </div>
+                )
+              }
+
+              // The file someone attached to their question. Rendered above the text
+              // bubble because the question usually refers to it.
+              if (msg.role === 'file' || msg.metadata?.attachments?.length) {
+                const files = msg.metadata?.attachments || []
+                return (
+                  <div key={msg.id} className="space-y-2">
+                    {files.map((file, index) => (
+                      <div key={index} className="flex justify-end">
+                        <FileCard
+                          name={file.name}
+                          type={file.type}
+                          size={file.size}
+                          viaOcr={file.viaOcr}
+                          method={file.method}
+                          textLength={file.textLength}
+                          thumbnail={file.thumbnail}
+                          width={file.width}
+                          height={file.height}
+                          warning={file.warning}
+                        />
+                      </div>
+                    ))}
+                    {msg.content && <UserBubble content={msg.content} />}
                   </div>
                 )
               }

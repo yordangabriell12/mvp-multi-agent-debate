@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { type ProviderConfig, PRESET_PROVIDERS } from '@/types/provider'
 import { useAgentStore } from '@/store/agentStore'
 import { generateId } from '@/lib/utils'
+import { pickDefaultModel } from '@/lib/defaultModel'
 import { STORAGE_KEYS } from '@/lib/storage'
 
 interface SettingsState {
@@ -73,16 +74,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const providers = state.providers.filter((p) => p.id !== id)
       saveProviders(providers)
       // Cascade: reassign any agent that was pointing at the removed provider.
-      // "Configured" is read from `hasKey`, because a non-admin never receives
-      // the key itself and `apiKey` is empty for them.
-      const fallback =
-        providers.find((p) => p.hasKey || p.apiKey) || providers[0]
-      const fallbackModel = fallback?.models[0]?.id || ''
+      // Through the shared helper so a removal lands on the same provider a new agent
+      // would start on, rather than on whatever happens to be first in the list.
+      const chosen = pickDefaultModel(providers)
       const agentStore = useAgentStore.getState()
       for (const a of agentStore.agents) {
         if (a.model.provider === id) {
           agentStore.updateAgent(a.id, {
-            model: { provider: fallback?.id || 'openai', modelName: fallbackModel },
+            model: { provider: chosen.provider, modelName: chosen.modelName },
           })
         }
       }
