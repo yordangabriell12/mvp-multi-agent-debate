@@ -21,6 +21,55 @@ updated: 2026-09-10
 
 ## 2026-09-30
 
+### 🕐 Agen kini tahu tanggal hari ini
+
+Kalau Anda menulis **"cari ihsg hari ini"**, agen mencari tanpa tanggal sama sekali. Mesin
+pencari lalu menebak sendiri apa arti "hari ini", dan karena nilai indeks berubah tiap hari,
+hasil dari tahun yang salah **terlihat sama persis** dengan hasil yang benar. Model juga tidak
+punya jam: "hari ini" baginya adalah tanggal terakhir di data latihannya.
+
+| Yang diperbaiki | Sebelumnya | Sekarang |
+| --- | --- | --- |
+| **Tanggal di prompt agen** | Tidak ada sama sekali | Blok tanggal: hari, jam, zona, dan peringatan bahwa data latihan lebih tua |
+| **Query pencarian** | `cari ihsg hari ini` dikirim apa adanya | `cari ihsg hari ini 2026` ditambahkan hanya kalau memang sensitif waktu |
+| **Perencana query** | Tidak tahu tanggal | Diberi tanggal + contoh bentuk query yang benar |
+| **Moderator** | Tidak tahu tanggal | Diberi tanggal, karena dialah yang menulis pertanyaan tiap agen |
+| **Web search biasa** | Pertanyaan mentah | Tahun ditambahkan kalau pertanyaannya menyangkut nilai terkini |
+
+Blok yang benar-benar diterima model, dari uji end-to-end:
+
+```
+QUESTION: cari ihsg hari ini
+
+TODAY IS Wednesday, 30 September 2026 (Asia/Jakarta).
+Anything that changes daily, such as an index, a price or a rate, needs this date in the
+query: search "cari ihsg hari ini 30 September 2026" rather than the bare topic.
+```
+
+#### Kenapa tanggalnya dari browser, bukan dari server
+
+Container produksi berjalan di **UTC**, sedangkan Anda di **WIB**. Jam 08:00 pagi di Jakarta
+masih tanggal **kemarin** di UTC. Kalau tanggal diambil dari server, maka selama tujuh jam
+pertama setiap hari agen akan menyebut tanggal yang salah, tepat pada saat Anda paling butuh
+tanggal yang benar.
+
+Tanggalnya juga dibaca **baru setiap giliran**, bukan sekali per sesi. Tab yang dibiarkan
+terbuka semalam akan tetap bilang "hari ini" untuk kemarin kalau di-cache.
+
+#### Tahun ditambahkan dengan hati-hati
+
+Tahun hanya ditambahkan kalau pertanyaannya **memang** menyangkut nilai terkini dan belum
+menyebut tanggal. Menambahkannya sembarangan justru merusak: `apa itu dewave 2026` adalah
+query yang lebih buruk daripada `apa itu dewave`.
+
+Yang tidak diubah: pertanyaan yang sudah menyebut tahun (`ihsg 2024` tetap 2024, bukan
+dibetulkan ke 2026, karena Anda menyebutnya sengaja) dan yang sudah menyebut bulan
+(`ihsg 30 September`). Pencocokan kata waktunya juga utuh, bukan potongan huruf, supaya
+"knowledge" tidak dianggap "now" dan "snowflake" tidak dianggap salju yang relevan.
+
+- **Diuji**: `clock.test.ts` (19 tes), `deepSearch.test.ts` (26 tes termasuk tanggal di
+  perencana), dan pemeriksaan end-to-end yang membaca prompt asli yang diterima model
+
 ### 🔎 Search Mode: tiap agen mencari kata kunci yang berbeda
 
 Sebelumnya, waktu Search Mode menyala dan pertanyaannya `cari tahu apa itu dewave @all`,

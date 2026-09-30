@@ -12,7 +12,23 @@ import { selectAgentsForQuestion } from '@/lib/routing'
 import { pickDefaultModel } from '@/lib/defaultModel'
 import { userQuestion } from '@/lib/fileQuestion'
 import { createLock } from '@/lib/lock'
+import { browserClock, clockBlock, queryForSearch } from '@/lib/clock'
 import { QUALITY_RULES } from '@/lib/prompts'
+
+/**
+ * The current date block, read fresh every time it is called.
+ *
+ * Deliberately not cached in a ref or computed once per session. A tab left open overnight
+ * would then still be telling the agents it is yesterday, which is the same class of bug as
+ * having no clock at all: the answer is specific and wrong.
+ *
+ * The date comes from the browser, not the server. The container runs in UTC while the reader
+ * may be seven hours ahead, so for the first part of their day the server is still on the
+ * previous date, and "today" would be wrong exactly when it matters most.
+ */
+function currentDateBlock(): string {
+  return clockBlock(browserClock())
+}
 
 const MODE_PREFIXES: Record<string, string> = {
   boardroom: 'STYLE: Structured boardroom debate. Be direct, challenge assumptions, pressure-test ideas. Short and sharp.',
@@ -221,11 +237,11 @@ export function useChat(sessionId: string) {
     const linesStr = lines.join(NL)
     const prefix = mp ? mp + DNL : ''
     if (isDebate) {
-      return [{ role: 'user' as const, content: 'You are ' + agentName + '. This is a HIGH-STAKES debate. Others below are THEIR OWN statements.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + researchBlock + QUALITY_RULES + 'DEBATE RULES:' + NL + '1. DISAGREE if you see flaws. Say "That is wrong because..." not "I see your point, but..."' + NL + '2. CHALLENGE weak evidence. Ask "Where is the data?" "Have you actually tested this?"' + NL + '3. Use SPECIFIC examples, numbers, cases. Vague claims get called out.' + NL + '4. Be CONCISE but SHARP. 4-6 sentences. Every sentence must add value.' + NL + '5. Do NOT include your name or title.' + NL + LANG_RULE + rag + DNL + linesStr + DNL + 'Respond now.' }]
+      return [{ role: 'user' as const, content: 'You are ' + agentName + '. This is a HIGH-STAKES debate. Others below are THEIR OWN statements.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + researchBlock + currentDateBlock() + QUALITY_RULES + 'DEBATE RULES:' + NL + '1. DISAGREE if you see flaws. Say "That is wrong because..." not "I see your point, but..."' + NL + '2. CHALLENGE weak evidence. Ask "Where is the data?" "Have you actually tested this?"' + NL + '3. Use SPECIFIC examples, numbers, cases. Vague claims get called out.' + NL + '4. Be CONCISE but SHARP. 4-6 sentences. Every sentence must add value.' + NL + '5. Do NOT include your name or title.' + NL + LANG_RULE + rag + DNL + linesStr + DNL + 'Respond now.' }]
     }
     const questionToAnswer = moderatorQuestion || (latestUser?.content || '')
     const questionLabel = moderatorQuestion ? 'MODERATOR ASKS' : 'USER ASKS'
-    return [{ role: 'user' as const, content: 'You are ' + agentName + ', a participant in a multi-agent discussion room.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + webSearchBlock + researchBlock + QUALITY_RULES + 'INSTRUCTIONS:' + NL + '1. Respond to ' + questionLabel + ' below.' + NL + '2. Be concise.' + NL + '3. Do NOT include your name or title in response.' + NL + '4. Do not repeat earlier points. Reference what others said above.' + LANG_RULE + rag + DNL + questionLabel + ': "' + questionToAnswer + '"' + NL + 'Context:' + NL + (linesStr || '(first message)') + DNL + 'Respond.' }]
+    return [{ role: 'user' as const, content: 'You are ' + agentName + ', a participant in a multi-agent discussion room.' + NL + prefix + personaBlock + skillsBlock + memoryBlock + webSearchBlock + researchBlock + currentDateBlock() + QUALITY_RULES + 'INSTRUCTIONS:' + NL + '1. Respond to ' + questionLabel + ' below.' + NL + '2. Be concise.' + NL + '3. Do NOT include your name or title in response.' + NL + '4. Do not repeat earlier points. Reference what others said above.' + LANG_RULE + rag + DNL + questionLabel + ': "' + questionToAnswer + '"' + NL + 'Context:' + NL + (linesStr || '(first message)') + DNL + 'Respond.' }]
   }, [buildRagContext, getModePrefix])
   const getTargetAgents = useCallback((content: string): { id: string; name: string }[] => {
     const roomAgents = agents.filter((a) => session?.agentIds.includes(a.id))
@@ -248,10 +264,14 @@ export function useChat(sessionId: string) {
     if (!anyAgentSearches) return
 
     try {
+      // The engine gets a query, not a sentence, and a question asking for something current
+      // needs the date in it. "cari ihsg hari ini" is sent as "cari ihsg hari ini 2026" so the
+      // engine cannot decide for itself what "hari ini" means.
+      const searchQuery = queryForSearch(question, browserClock()).slice(0, 300)
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: question.slice(0, 300) }),
+        body: JSON.stringify({ query: searchQuery }),
       })
       if (!res.ok) return
 
@@ -329,7 +349,10 @@ export function useChat(sessionId: string) {
           question,
           current.settings.deepSearchMaxQueries ?? 2,
           { provider: agent.model.provider, modelName: agent.model.modelName },
-          claimedQueries()
+          claimedQueries(),
+          // Read here rather than when the send began, so a tab left open overnight does not
+          // search for yesterday.
+          browserClock() ?? undefined
         )
 
         // Claimed before the ticket is given up, not after the search finishes. Reserving
@@ -591,7 +614,7 @@ export function useChat(sessionId: string) {
 
       await prepareWebSearch(discussionTopic)
 
-      const openCtx = [{ role: 'user' as const, content: 'USER QUESTION: "' + discussionTopic + '"' + DNL + 'PARTICIPANTS: ' + agentList + DNL + 'Call the FIRST agent by name with a specific question based on their expertise. Max 2 sentences. ' + LANG_RULE }]
+      const openCtx = [{ role: 'user' as const, content: 'USER QUESTION: "' + discussionTopic + '"' + DNL + 'PARTICIPANTS: ' + agentList + DNL + currentDateBlock() + 'Call the FIRST agent by name with a specific question based on their expertise. Max 2 sentences. ' + LANG_RULE }]
       await callMod(openCtx, modAgent)
 
       // Phase 2: Agentic loop - moderator decides each step

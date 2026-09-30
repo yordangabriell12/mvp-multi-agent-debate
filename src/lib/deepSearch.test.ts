@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { proposeQueries, researchFor, readStream } from '@/lib/deepSearch'
 import { createLock } from '@/lib/lock'
+import { clockContext } from '@/lib/clock'
 
 /** Builds a chat route style stream: newline separated `0:` JSON frames. */
 function chatStream(chunks: string[]): ReadableStream<Uint8Array> {
@@ -153,6 +154,36 @@ describe('proposeQueries', () => {
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)
     // An empty heading would be noise in every first-agent prompt.
     expect(body.messages[0].content).not.toContain('ALREADY SEARCHED')
+  })
+
+  /**
+   * The reported symptom: asked about the index "today", the agent searched without a date and
+   * reported a stale value as current. The planner has to be told the date so the query can
+   * carry it.
+   */
+  it('tells the planner the date and shows it in an example query', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(chatStream(['IHSG 30 September 2026'])))
+    const now = clockContext(new Date('2026-09-30T07:35:00Z'), 'Asia/Jakarta')!
+
+    await proposeQueries('Finance Advisor', 'cari ihsg hari ini', 2, target, [], now)
+
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)
+    const prompt = body.messages[0].content as string
+    expect(prompt).toContain('TODAY IS Wednesday, 30 September 2026')
+    expect(prompt).toContain('Asia/Jakarta')
+    // The example has to be shaped like a query, since that is what the model copies.
+    expect(prompt).toContain('cari ihsg hari ini 30 September 2026')
+    // And the instruction has to ask for the year explicitly.
+    expect(body.agent.systemPrompt).toContain('put the year')
+  })
+
+  it('omits the date block when no clock was supplied', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(chatStream(['a query'])))
+
+    await proposeQueries('Advisor', 'question', 2, target)
+
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)
+    expect(body.messages[0].content).not.toContain('TODAY IS')
   })
 })
 

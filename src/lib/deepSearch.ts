@@ -17,6 +17,7 @@
 // conversation as ordinary messages.
 
 import { distinctQueries } from '@/lib/queryDedupe'
+import type { ClockContext } from '@/lib/clock'
 
 export interface ResearchResult {
   /** The queries that were run, in order. */
@@ -91,13 +92,18 @@ export interface PlannerTarget {
  * A chatty reply is tolerated rather than fatal: lines are stripped of numbering
  * and bullets, and anything still prose-like is dropped by the length bound. The
  * worst case is a poor query, not a broken turn.
+ *
+ * `now` is the reader's date, when known. It is passed to the planner because a search built
+ * from the wrong year returns pages about the wrong year: asking for "IHSG today" when the
+ * model's training data ended last year finds a stale index value and presents it as current.
  */
 export async function proposeQueries(
   role: string,
   question: string,
   maxQueries: number,
   target: PlannerTarget,
-  avoid: readonly string[] = []
+  avoid: readonly string[] = [],
+  now?: ClockContext
 ): Promise<string[]> {
   const instruction = [
     'You decide what to look up before answering a question.',
@@ -106,6 +112,9 @@ export async function proposeQueries(
     'Write each one the way someone would type it into a search engine: short and specific.',
     'Use the language the question is written in.',
     'Another participant may have already searched; you will be told what they used. Never repeat one of those queries, and do not merely reword one: find a different angle, a different source, or a different part of the question.',
+    // Without this a query for something that changes daily is built from the model's own
+    // sense of the date, which is its training cutoff.
+    'For anything that changes over time, put the year, or the month and year, in the query.',
     'If looking something up would not help, reply with exactly: NONE',
   ].join(' ')
 
@@ -116,6 +125,14 @@ export async function proposeQueries(
       avoid.map((query) => '- ' + query).join(NL) + NL
     : ''
 
+  // Stated as its own block rather than folded into the instruction, because a date buried
+  // inside a paragraph of rules is easy for a model to read past.
+  const currentDate = now
+    ? DNL + 'TODAY IS ' + now.date + ' (' + now.timeZone + ').' + NL +
+      'Anything that changes daily, such as an index, a price or a rate, needs this date in the' + NL +
+      'query: search "' + queryWithDate(question, now) + '" rather than the bare topic.' + NL
+    : ''
+
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -124,7 +141,7 @@ export async function proposeQueries(
         messages: [
           {
             role: 'user',
-            content: 'YOUR ROLE: ' + role + DNL + 'QUESTION: ' + question.slice(0, 1200) + alreadySearched,
+            content: 'YOUR ROLE: ' + role + DNL + 'QUESTION: ' + question.slice(0, 1200) + alreadySearched + currentDate,
           },
         ],
         agent: {
@@ -157,6 +174,18 @@ export async function proposeQueries(
     // A planner that fails means no research, not a broken turn.
     return []
   }
+}
+
+/**
+ * The question with the date folded in, for the example query in the prompt.
+ *
+ * Shows the shape wanted rather than describing it: a model that has never written
+ * "IHSG 30 September 2026" tends to write "IHSG today", which is the query that finds a stale
+ * value. The question is trimmed to a few words first so the example stays query-shaped.
+ */
+function queryWithDate(question: string, now: ClockContext): string {
+  const topic = question.trim().replace(/\s+/g, ' ').split(' ').slice(0, 6).join(' ')
+  return topic ? topic + ' ' + now.shortDate : now.shortDate
 }
 
 /** Runs one query and returns what came back. Never throws. */

@@ -27,9 +27,18 @@
  */
 
 import { createServer } from 'node:http'
+import { appendFileSync } from 'node:fs'
 
 const port = Number(process.argv[2] || 4598)
 const STUBBORN = process.env.VMA_MOCK_STUBBORN === '1'
+/**
+ * Where to record the prompts that arrive, for verifying what the model was actually told.
+ *
+ * Set by a test that needs to see the real prompt rather than assert on a string built in
+ * isolation. It is how the date being present is checked end to end: the browser clock, the
+ * hook and the planner all have to line up for the date to appear here.
+ */
+const PROMPT_LOG = process.env.VMA_MOCK_PROMPT_LOG || ''
 
 /** The queries a lazy planner reaches for, whatever it is asked. */
 const OBVIOUS_QUERIES = ['apa itu dewave', 'dewave indonesia']
@@ -116,10 +125,18 @@ createServer((req, res) => {
     try { parsed = JSON.parse(body) } catch { /* an unreadable body is answered as a planner */ }
 
     const system = String(parsed?.messages?.find((m) => m.role === 'system')?.content || '')
+    const userPrompt = String(parsed?.messages?.find((m) => m.role === 'user')?.content || '')
     const isPlanner = /Reply with search queries only/i.test(system)
 
+    // Recorded before answering, so the log shows what was asked even when the reply is a
+    // fixed string.
+    if (PROMPT_LOG) {
+      try {
+        appendFileSync(PROMPT_LOG, JSON.stringify({ kind: isPlanner ? 'planner' : 'agent', system, user: userPrompt }) + String.fromCharCode(10))
+      } catch { /* a log that cannot be written must not break the reply */ }
+    }
+
     if (isPlanner) {
-      const userPrompt = String(parsed?.messages?.find((m) => m.role === 'user')?.content || '')
       const queries = STUBBORN ? OBVIOUS_QUERIES : compliantQueries(userPrompt)
       sse(res, queries.join('\n') + '\n')
       return
